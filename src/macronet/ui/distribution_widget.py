@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QDoubleSpinBox,
@@ -36,8 +36,11 @@ EXAMPLE_COSTS = (
 class DistributionWidget(QWidget):
     """Muestra cada insumo y resultado del balanceo gravitacional."""
 
+    result_calculated = Signal(object)
+
     def __init__(self) -> None:
         super().__init__()
+        self.current_result = None
         self._zone_names = EXAMPLE_NAMES
         self._build_ui()
         self._set_marginals(EXAMPLE_NAMES, EXAMPLE_PRODUCTIONS, EXAMPLE_ATTRACTIONS)
@@ -179,6 +182,8 @@ class DistributionWidget(QWidget):
             f"<b>Resultado:</b> el modelo {state} en {result.iterations} iteraciones; "
             f"error máximo final = {result.maximum_error:.3e} viajes."
         )
+        self.current_result = result
+        self.result_calculated.emit(result)
 
     def _set_marginals(
         self,

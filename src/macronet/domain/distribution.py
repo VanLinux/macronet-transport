@@ -27,6 +27,7 @@ class DistributionResult:
     """Matrices y evidencia de convergencia del modelo gravitacional."""
 
     zone_names: tuple[str, ...]
+    impedance_matrix: Matrix
     friction_matrix: Matrix
     trip_matrix: Matrix
     row_totals: tuple[float, ...]
@@ -111,6 +112,7 @@ def distribute_trips(
     final_columns = _column_totals(working_matrix)
     return DistributionResult(
         zone_names=names,
+        impedance_matrix=cost_matrix,
         friction_matrix=friction_matrix,
         trip_matrix=tuple(tuple(value for value in row) for row in working_matrix),
         row_totals=final_rows,
