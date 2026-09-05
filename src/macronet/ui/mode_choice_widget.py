@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
@@ -79,8 +78,9 @@ class ModeChoiceWidget(QWidget):
         layout.addWidget(title)
 
         explanation = QLabel(
-            "Cada celda de la matriz OD se divide entre las alternativas mediante sus "
-            "utilidades. Modifique los parámetros para observar cómo cambian las cuotas."
+            "Esta etapa reparte cada celda de la matriz OD entre los modos disponibles "
+            "mediante funciones de utilidad y un modelo logit multinomial. Modifique los "
+            "parámetros para observar cómo cambian las participaciones."
         )
         explanation.setWordWrap(True)
         layout.addWidget(explanation)
@@ -318,7 +318,6 @@ class ModeChoiceWidget(QWidget):
         item = QTableWidgetItem(text)
         item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        item.setBackground(QColor("#e8f0fe"))
         table.setItem(row, column, item)
 
     @staticmethod
