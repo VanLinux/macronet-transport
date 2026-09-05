@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "macronet-transport"
+version = "0.1.0.dev0"
+description = "Educational software for four-step transportation modeling"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "GPL-3.0-only" }
+authors = [
+  { name = "Héctor Alonso Benítez García" },
+]
+dependencies = [
+  "matplotlib>=3.8",
+  "networkx>=3.2",
+  "numpy>=1.26",
+  "openpyxl>=3.1",
+  "pandas>=2.2",
+  "PySide6>=6.7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-cov>=5.0",
+  "ruff>=0.6",
+]
+
+[project.gui-scripts]
+macronet = "macronet.application:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/macronet"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
