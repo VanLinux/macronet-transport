@@ -26,7 +26,7 @@ Cada módulo deberá separar el modelo matemático de la interfaz gráfica y con
 
 ## Estado
 
-El proyecto se encuentra en su fase inicial de diseño y construcción. La estructura actual establece la base técnica y el recorrido educativo de las cuatro etapas; todavía no implementa los modelos matemáticos finales.
+El proyecto se encuentra en su fase inicial de diseño y construcción. Ya incluye un primer módulo interactivo de generación y atracción de viajes con cálculo por zona, desglose de ecuaciones y balanceo de atracciones.
 
 ## Tecnología prevista
 
@@ -61,3 +61,5 @@ pytest
 ## Documentación
 
 El alcance funcional de la primera versión se encuentra en [`docs/scope-v0.1.md`](docs/scope-v0.1.md).
+
+El caso didáctico incluido en el primer módulo está documentado en [`docs/examples/generation-four-zones.md`](docs/examples/generation-four-zones.md).
