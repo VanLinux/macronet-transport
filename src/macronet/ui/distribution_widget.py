@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QGridLayout,
@@ -54,8 +53,9 @@ class DistributionWidget(QWidget):
         layout.addWidget(title)
 
         explanation = QLabel(
-            "Las producciones y atracciones provienen de la etapa anterior. Modifique las "
-            "impedancias o β para observar cómo cambia la matriz origen-destino."
+            "Esta etapa conecta las producciones y atracciones en una matriz origen-destino "
+            "mediante un modelo gravitacional doblemente restringido y balanceo de Furness. "
+            "Modifique las impedancias o β para observar el cambio."
         )
         explanation.setWordWrap(True)
         layout.addWidget(explanation)
@@ -313,7 +313,6 @@ class DistributionWidget(QWidget):
         item = QTableWidgetItem(text)
         item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        item.setBackground(QColor("#e8f0fe"))
         table.setItem(row, column, item)
 
     @staticmethod
