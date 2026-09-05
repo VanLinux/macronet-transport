@@ -8,7 +8,6 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from matplotlib.patches import FancyArrowPatch
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QGroupBox,
     QHeaderView,
@@ -121,7 +120,10 @@ class AssignmentWidget(QWidget):
         title.setStyleSheet("font-size: 24px; font-weight: 600;")
         layout.addWidget(title)
 
-        self.explanation = QLabel()
+        self.explanation = QLabel(
+            "Esta etapa carga la demanda modal en la red mediante asignación Todo-o-Nada "
+            "y calcula las rutas mínimas con el algoritmo de Dijkstra."
+        )
         self.explanation.setWordWrap(True)
         layout.addWidget(self.explanation)
         layout.addWidget(self._build_equations_group())
@@ -214,8 +216,9 @@ class AssignmentWidget(QWidget):
             return
 
         self.explanation.setText(
-            f"Se asigna la matriz modal de {self._mode_name}. La capacidad no modifica "
-            "las rutas en Todo-o-Nada; se utiliza únicamente para calcular v/c."
+            f"Se asigna la matriz modal de {self._mode_name} mediante Todo-o-Nada y rutas "
+            "mínimas de Dijkstra. La capacidad no modifica las rutas; se utiliza únicamente "
+            "para calcular v/c."
         )
         self._fill_paths(result)
         self._fill_flows(result)
@@ -355,7 +358,6 @@ class AssignmentWidget(QWidget):
         item = QTableWidgetItem(text)
         item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        item.setBackground(QColor("#e8f0fe"))
         table.setItem(row, column, item)
 
     @staticmethod
