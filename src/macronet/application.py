@@ -13,6 +13,29 @@ from macronet.ui.distribution_widget import DistributionWidget
 from macronet.ui.generation_widget import GenerationWidget
 from macronet.ui.mode_choice_widget import ModeChoiceWidget
 
+OVERVIEW_STAGES = (
+    (
+        "Generación y atracción de viajes",
+        "Estima cuántos viajes produce y atrae cada zona mediante regresiones lineales "
+        "y balanceo proporcional.",
+    ),
+    (
+        "Distribución de viajes",
+        "Relaciona orígenes y destinos en una matriz OD mediante un modelo gravitacional "
+        "doblemente restringido y el algoritmo de Furness.",
+    ),
+    (
+        "Elección modal",
+        "Reparte cada flujo OD entre los modos disponibles mediante funciones de utilidad "
+        "y un modelo logit multinomial.",
+    ),
+    (
+        "Asignación de viajes",
+        "Carga la demanda modal en la red con asignación Todo-o-Nada y rutas mínimas "
+        "calculadas con el algoritmo de Dijkstra.",
+    ),
+)
+
 
 class MainWindow(QMainWindow):
     """Ventana inicial del recorrido educativo."""
@@ -62,16 +85,25 @@ class MainWindow(QMainWindow):
         title.setStyleSheet("font-size: 28px; font-weight: 600;")
         layout.addWidget(title)
 
-        subtitle = QLabel("Modelo educativo de transporte de cuatro etapas")
+        subtitle = QLabel("Modelo educativo de transporte de cuatro etapas para macrosimulación")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(subtitle)
 
-        for index, stage in enumerate(FOUR_STEP_SEQUENCE, start=1):
-            label = QLabel(f"{index}. {stage.display_name}")
+        for index, (name, description) in enumerate(OVERVIEW_STAGES, start=1):
+            label = QLabel(f"<b>{index}. {name}</b><br><small>{description}</small>")
+            label.setTextFormat(Qt.TextFormat.RichText)
+            label.setWordWrap(True)
             label.setStyleSheet("font-size: 18px; padding: 10px;")
             layout.addWidget(label)
 
         layout.addStretch()
+
+        credits = QLabel(
+            "Software libre (GPL-3.0) · Desarrollado por Héctor Alonso Benítez García"
+        )
+        credits.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        credits.setStyleSheet("font-size: 12px; color: palette(mid); padding: 6px;")
+        layout.addWidget(credits)
         return container
 
 
