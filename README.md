@@ -26,7 +26,7 @@ Cada módulo deberá separar el modelo matemático de la interfaz gráfica y con
 
 ## Estado
 
-El proyecto se encuentra en su fase inicial de diseño y construcción. Ya incluye módulos interactivos de generación y atracción, y de distribución de viajes mediante un modelo gravitacional doblemente restringido.
+El proyecto se encuentra en su fase inicial de diseño y construcción. Ya incluye módulos interactivos de generación y atracción, distribución gravitacional y elección modal logit multinomial.
 
 ## Tecnología prevista
 
@@ -65,3 +65,5 @@ El alcance funcional de la primera versión se encuentra en [`docs/scope-v0.1.md
 El caso didáctico incluido en el primer módulo está documentado en [`docs/examples/generation-four-zones.md`](docs/examples/generation-four-zones.md).
 
 La distribución del mismo caso se documenta en [`docs/examples/distribution-four-zones.md`](docs/examples/distribution-four-zones.md).
+
+La elección modal se desarrolla en [`docs/examples/mode-choice-four-zones.md`](docs/examples/mode-choice-four-zones.md).
