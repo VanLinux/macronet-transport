@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QComboBox,
@@ -49,6 +49,8 @@ DEFAULT_MODES = (
 
 class ModeChoiceWidget(QWidget):
     """Expone utilidades, probabilidades y matrices modales."""
+
+    result_calculated = Signal(object)
 
     MODE_HEADERS = (
         "Modo",
@@ -193,6 +195,7 @@ class ModeChoiceWidget(QWidget):
             f"<b>Comprobación:</b> {result.total_trips:,.2f} viajes distribuidos; "
             f"Σ de participaciones = {sum(mode.share for mode in result.mode_summaries):.6f}."
         )
+        self.result_calculated.emit(result)
 
     def _restore_defaults(self) -> None:
         self.time_coefficient_input.setValue(-0.08)

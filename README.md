@@ -26,7 +26,7 @@ Cada módulo deberá separar el modelo matemático de la interfaz gráfica y con
 
 ## Estado
 
-El proyecto se encuentra en su fase inicial de diseño y construcción. Ya incluye módulos interactivos de generación y atracción, distribución gravitacional y elección modal logit multinomial.
+El proyecto se encuentra en su fase inicial de diseño y construcción. Ya incluye un recorrido funcional por las cuatro etapas: generación y atracción, distribución gravitacional, elección modal logit y asignación Todo-o-Nada.
 
 ## Tecnología prevista
 
@@ -67,3 +67,5 @@ El caso didáctico incluido en el primer módulo está documentado en [`docs/exa
 La distribución del mismo caso se documenta en [`docs/examples/distribution-four-zones.md`](docs/examples/distribution-four-zones.md).
 
 La elección modal se desarrolla en [`docs/examples/mode-choice-four-zones.md`](docs/examples/mode-choice-four-zones.md).
+
+La asignación de la demanda de automóvil se documenta en [`docs/examples/all-or-nothing-four-zones.md`](docs/examples/all-or-nothing-four-zones.md).

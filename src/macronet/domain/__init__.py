@@ -1,5 +1,13 @@
 """Entidades y reglas independientes de la interfaz gráfica."""
 
+from macronet.domain.assignment import (
+    AssignmentError,
+    AssignmentPath,
+    AssignmentResult,
+    Link,
+    LinkAssignmentResult,
+    assign_all_or_nothing,
+)
 from macronet.domain.distribution import (
     DistributionError,
     DistributionResult,
@@ -27,6 +35,9 @@ from macronet.domain.mode_choice import (
 
 __all__ = [
     "AlternativeChoiceResult",
+    "AssignmentError",
+    "AssignmentPath",
+    "AssignmentResult",
     "DistributionError",
     "DistributionResult",
     "FOUR_STEP_SEQUENCE",
@@ -35,6 +46,8 @@ __all__ = [
     "GenerationCoefficients",
     "GenerationError",
     "GenerationResult",
+    "Link",
+    "LinkAssignmentResult",
     "ModeChoiceError",
     "ModeChoiceResult",
     "ModeSpecification",
@@ -42,6 +55,7 @@ __all__ = [
     "OdModeChoiceResult",
     "ZoneGenerationResult",
     "ZoneInput",
+    "assign_all_or_nothing",
     "calculate_generation",
     "choose_modes",
     "distribute_trips",

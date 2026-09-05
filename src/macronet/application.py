@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QTabWidget, QVBoxLayout, QWidget
 
 from macronet.domain.four_step import FOUR_STEP_SEQUENCE
+from macronet.ui.assignment_widget import AssignmentWidget
 from macronet.ui.distribution_widget import DistributionWidget
 from macronet.ui.generation_widget import GenerationWidget
 from macronet.ui.mode_choice_widget import ModeChoiceWidget
@@ -26,16 +27,19 @@ class MainWindow(QMainWindow):
         generation_widget = GenerationWidget()
         distribution_widget = DistributionWidget()
         mode_choice_widget = ModeChoiceWidget()
+        assignment_widget = AssignmentWidget()
         generation_widget.result_calculated.connect(distribution_widget.set_from_generation)
         distribution_widget.result_calculated.connect(mode_choice_widget.set_from_distribution)
+        mode_choice_widget.result_calculated.connect(assignment_widget.set_from_mode_choice)
         tabs.addTab(generation_widget, "1. Generación y atracción")
         tabs.addTab(distribution_widget, "2. Distribución")
         tabs.addTab(mode_choice_widget, "3. Elección modal")
+        tabs.addTab(assignment_widget, "4. Asignación")
 
         if generation_widget.current_result is not None:
             distribution_widget.set_from_generation(generation_widget.current_result)
 
-        for index, stage in enumerate(FOUR_STEP_SEQUENCE[3:], start=4):
+        for index, stage in enumerate(FOUR_STEP_SEQUENCE[4:], start=5):
             placeholder = QLabel(
                 f"{stage.display_name}\n\nMódulo planificado para una versión posterior."
             )
