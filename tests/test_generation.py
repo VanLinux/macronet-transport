@@ -7,7 +7,6 @@ from macronet.domain.generation import (
     calculate_generation,
 )
 
-
 EXAMPLE_ZONES = (
     ZoneInput("Centro", 100, 60, 200, 100),
     ZoneInput("Norte", 120, 80, 100, 150),

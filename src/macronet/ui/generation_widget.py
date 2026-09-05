@@ -27,7 +27,6 @@ from macronet.domain.generation import (
     calculate_generation,
 )
 
-
 EXAMPLE_ZONES = (
     ("Centro", 100, 60, 200, 100),
     ("Norte", 120, 80, 100, 150),
