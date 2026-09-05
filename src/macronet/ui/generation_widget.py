@@ -68,7 +68,9 @@ class GenerationWidget(QWidget):
         explanation = QLabel(
             "Esta etapa estima los viajes producidos y atraídos por cada zona mediante "
             "regresiones lineales. Modifique los datos o coeficientes y pulse Calcular; "
-            "las atracciones se balancean para igualar el total de producciones."
+            "las atracciones se balancean para igualar el total de producciones. "
+            "Cambie los nombres de zona aquí y pulse Calcular para actualizarlos en "
+            "las demás pestañas."
         )
         explanation.setWordWrap(True)
         layout.addWidget(explanation)

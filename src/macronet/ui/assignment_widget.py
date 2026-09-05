@@ -192,13 +192,24 @@ class AssignmentWidget(QWidget):
             summaries[0],
         )
         new_names = mode_choice_result.zone_names
-        names_changed = new_names != self._zone_names
+        old_names = self._zone_names
         self._zone_names = new_names
         self._demand_matrix = selected.trip_matrix
         self._mode_name = selected.mode_name
-        self._set_zone_nodes(new_names)
-        if names_changed:
+        if len(new_names) != len(old_names):
+            self._set_zone_nodes(new_names)
             self._set_links(self._default_links(new_names))
+        else:
+            # Renaming a zone must not restore the user's network or centroid mapping.
+            renames = dict(zip(old_names, new_names, strict=True))
+            for row, name in enumerate(new_names):
+                self.zone_nodes_table.item(row, 0).setText(name)
+                node_item = self.zone_nodes_table.item(row, 1)
+                node_item.setText(renames.get(node_item.text(), node_item.text()))
+            for row in range(self.links_table.rowCount()):
+                for column in (1, 2):
+                    item = self.links_table.item(row, column)
+                    item.setText(renames.get(item.text(), item.text()))
         self.calculate()
 
     def calculate(self) -> None:

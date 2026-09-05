@@ -155,6 +155,8 @@ class DistributionWidget(QWidget):
         self._set_marginals(names, productions, attractions)
         if self.cost_table.rowCount() != len(names):
             self._set_cost_matrix(self._default_costs(len(names)))
+        self.cost_table.setHorizontalHeaderLabels(names)
+        self.cost_table.setVerticalHeaderLabels(names)
         self.calculate()
 
     def calculate(self) -> None:
@@ -195,7 +197,11 @@ class DistributionWidget(QWidget):
         self.marginals_table.setRowCount(len(names))
         for row, values in enumerate(zip(names, productions, attractions, strict=True)):
             for column, value in enumerate(values):
-                self.marginals_table.setItem(row, column, QTableWidgetItem(str(value)))
+                item = QTableWidgetItem(str(value))
+                if column == 0:
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    item.setToolTip("Cambie el nombre en Generación y pulse Calcular.")
+                self.marginals_table.setItem(row, column, item)
 
     def _restore_costs(self) -> None:
         if len(self._zone_names) == len(EXAMPLE_COSTS):
