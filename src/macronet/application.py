@@ -5,9 +5,10 @@ from __future__ import annotations
 import sys
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QTabWidget, QVBoxLayout, QWidget
 
 from macronet.domain.four_step import FOUR_STEP_SEQUENCE
+from macronet.ui.generation_widget import GenerationWidget
 
 
 class MainWindow(QMainWindow):
@@ -16,7 +17,26 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("MacroNet Transport")
-        self.resize(900, 600)
+        self.resize(1100, 760)
+
+        tabs = QTabWidget()
+        tabs.addTab(self._build_overview(), "Inicio")
+        tabs.addTab(GenerationWidget(), "1. Generación y atracción")
+
+        for index, stage in enumerate(FOUR_STEP_SEQUENCE[1:], start=2):
+            placeholder = QLabel(
+                f"{stage.display_name}\n\nMódulo planificado para una versión posterior."
+            )
+            placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            placeholder.setStyleSheet("font-size: 18px; color: #666;")
+            tabs.addTab(placeholder, f"{index}. {stage.display_name}")
+            tabs.setTabEnabled(tabs.count() - 1, False)
+
+        self.setCentralWidget(tabs)
+
+    @staticmethod
+    def _build_overview() -> QWidget:
+        """Construye la portada y el recorrido de aprendizaje."""
 
         container = QWidget()
         layout = QVBoxLayout(container)
@@ -36,7 +56,7 @@ class MainWindow(QMainWindow):
             layout.addWidget(label)
 
         layout.addStretch()
-        self.setCentralWidget(container)
+        return container
 
 
 def main() -> int:
