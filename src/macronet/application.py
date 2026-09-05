@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QTabWidget, QVBoxLayout, QWidget
 
 from macronet.domain.four_step import FOUR_STEP_SEQUENCE
+from macronet.ui.distribution_widget import DistributionWidget
 from macronet.ui.generation_widget import GenerationWidget
 
 
@@ -21,9 +22,16 @@ class MainWindow(QMainWindow):
 
         tabs = QTabWidget()
         tabs.addTab(self._build_overview(), "Inicio")
-        tabs.addTab(GenerationWidget(), "1. Generación y atracción")
+        generation_widget = GenerationWidget()
+        distribution_widget = DistributionWidget()
+        generation_widget.result_calculated.connect(distribution_widget.set_from_generation)
+        tabs.addTab(generation_widget, "1. Generación y atracción")
+        tabs.addTab(distribution_widget, "2. Distribución")
 
-        for index, stage in enumerate(FOUR_STEP_SEQUENCE[1:], start=2):
+        if generation_widget.current_result is not None:
+            distribution_widget.set_from_generation(generation_widget.current_result)
+
+        for index, stage in enumerate(FOUR_STEP_SEQUENCE[2:], start=3):
             placeholder = QLabel(
                 f"{stage.display_name}\n\nMódulo planificado para una versión posterior."
             )

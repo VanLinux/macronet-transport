@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -38,6 +38,8 @@ EXAMPLE_ZONES = (
 class GenerationWidget(QWidget):
     """Permite modificar y observar el cálculo de la primera etapa."""
 
+    result_calculated = Signal(object)
+
     INPUT_COLUMN_COUNT = 5
     HEADERS = (
         "Zona",
@@ -52,6 +54,7 @@ class GenerationWidget(QWidget):
 
     def __init__(self) -> None:
         super().__init__()
+        self.current_result = None
         self._coefficient_inputs: dict[str, QDoubleSpinBox] = {}
         self._build_ui()
         self._load_example()
@@ -173,6 +176,8 @@ class GenerationWidget(QWidget):
             f"F = {result.balance_factor:.4f}; "
             f"ΣA* = {result.total_attractions_balanced:,.2f} viajes."
         )
+        self.current_result = result
+        self.result_calculated.emit(result)
 
     def _read_zone(self, row: int) -> ZoneInput:
         name_item = self.table.item(row, 0)
