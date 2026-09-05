@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDoubleSpinBox,
@@ -67,8 +66,9 @@ class GenerationWidget(QWidget):
         layout.addWidget(title)
 
         explanation = QLabel(
-            "Modifique los datos o coeficientes y pulse Calcular. Las atracciones se "
-            "balancean para que su suma coincida con las producciones del sistema."
+            "Esta etapa estima los viajes producidos y atraídos por cada zona mediante "
+            "regresiones lineales. Modifique los datos o coeficientes y pulse Calcular; "
+            "las atracciones se balancean para igualar el total de producciones."
         )
         explanation.setWordWrap(True)
         layout.addWidget(explanation)
@@ -205,5 +205,4 @@ class GenerationWidget(QWidget):
         item = QTableWidgetItem(text)
         item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        item.setBackground(QColor("#e8f0fe"))
         self.table.setItem(row, column, item)
