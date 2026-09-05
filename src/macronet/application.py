@@ -99,10 +99,10 @@ class MainWindow(QMainWindow):
         layout.addStretch()
 
         credits = QLabel(
-            "Software libre (GPL-3.0) · Desarrollado por Héctor Alonso Benítez García"
+            "Software libre (GPL-3.0) · Desarrollador: Héctor Benítez García"
         )
         credits.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        credits.setStyleSheet("font-size: 12px; color: palette(mid); padding: 6px;")
+        credits.setStyleSheet("font-size: 12px; padding: 6px;")
         layout.addWidget(credits)
         return container
 
