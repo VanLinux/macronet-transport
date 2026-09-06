@@ -48,7 +48,7 @@ def test_zone_rename_propagates_without_resetting_network(monkeypatch):
         assert assignment.links_table.item(0, 1).text() == "Zona A"
         assert assignment.links_table.item(0, 3).text() == "7.5"
         assert assignment.links_table.item(0, 4).text() == "123"
-        assert summary.assignment_result.zone_names[0] == "Zona B"
+        assert summary.assignment_result.zone_names[0] == "Zona A"
         assert assignment.paths_table.item(0, 0).text() == "Zona A"
 
         # Recalculation alone must not reset custom centroid node identifiers.
@@ -64,6 +64,7 @@ def test_zone_rename_propagates_without_resetting_network(monkeypatch):
         assert assignment.zone_nodes_table.item(0, 1).text() == "N001"
         assert assignment.links_table.item(0, 1).text() == "N001"
         assert assignment.links_table.item(0, 4).text() == "123"
+        assert summary.assignment_result.zone_names[0] == "Zona B"
         texts = [label.text() for label in tabs.widget(0).findChildren(QLabel)]
         assert any("Desarrollador: Héctor Benítez García" in text for text in texts)
     finally:
