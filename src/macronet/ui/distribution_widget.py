@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QDoubleSpinBox,
+    QFileDialog,
     QGridLayout,
     QGroupBox,
+    QHBoxLayout,
     QHeaderView,
     QLabel,
     QMessageBox,
@@ -19,7 +23,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from macronet.domain.distribution import DistributionError, distribute_trips
+from macronet.domain.distribution import (
+    DEFAULT_MAX_ITERATIONS,
+    DEFAULT_TOLERANCE,
+    DistributionError,
+    distribute_trips,
+)
+from macronet.exporters import save_od_csv
 
 EXAMPLE_NAMES = ("Centro", "Norte", "Sur", "Oriente")
 EXAMPLE_PRODUCTIONS = (260.0, 320.0, 290.0, 330.0)
@@ -91,10 +101,17 @@ class DistributionWidget(QWidget):
         matrices.addTab(self.history_table, "Convergencia")
         layout.addWidget(matrices, stretch=1)
 
+        actions = QHBoxLayout()
         calculate_button = QPushButton("Distribuir viajes")
         calculate_button.setDefault(True)
         calculate_button.clicked.connect(self.calculate)
-        layout.addWidget(calculate_button)
+        actions.addWidget(calculate_button)
+        self.export_button = QPushButton("Descargar matriz OD (.csv)")
+        self.export_button.setEnabled(False)
+        self.export_button.clicked.connect(self._export_od_csv)
+        actions.addWidget(self.export_button)
+        actions.addStretch()
+        layout.addLayout(actions)
 
         self.summary = QLabel()
         self.summary.setTextFormat(Qt.TextFormat.RichText)
@@ -127,11 +144,11 @@ class DistributionWidget(QWidget):
         self.tolerance_input = QDoubleSpinBox()
         self.tolerance_input.setRange(0.000001, 1.0)
         self.tolerance_input.setDecimals(6)
-        self.tolerance_input.setValue(0.000001)
+        self.tolerance_input.setValue(DEFAULT_TOLERANCE)
 
         self.iterations_input = QSpinBox()
         self.iterations_input.setRange(1, 10_000)
-        self.iterations_input.setValue(500)
+        self.iterations_input.setValue(DEFAULT_MAX_ITERATIONS)
 
         restore_button = QPushButton("Restaurar impedancias")
         restore_button.clicked.connect(self._restore_costs)
@@ -185,7 +202,34 @@ class DistributionWidget(QWidget):
             f"error máximo final = {result.maximum_error:.3e} viajes."
         )
         self.current_result = result
+        self.export_button.setEnabled(True)
         self.result_calculated.emit(result)
+
+    def _export_od_csv(self) -> None:
+        if self.current_result is None:
+            QMessageBox.information(
+                self,
+                "Sin resultados",
+                "Primero debe calcular la distribución de viajes.",
+            )
+            return
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Guardar matriz origen-destino",
+            "matriz_od.csv",
+            "Archivo CSV (*.csv)",
+        )
+        if not filename:
+            return
+        path = Path(filename)
+        if path.suffix.casefold() != ".csv":
+            path = path.with_suffix(".csv")
+        try:
+            save_od_csv(path, self.current_result)
+        except OSError as error:
+            QMessageBox.critical(self, "No se pudo guardar", str(error))
+            return
+        QMessageBox.information(self, "Exportación terminada", f"Matriz guardada en:\n{path}")
 
     def _set_marginals(
         self,

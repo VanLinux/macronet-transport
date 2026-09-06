@@ -7,11 +7,13 @@ import sys
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QTabWidget, QVBoxLayout, QWidget
 
+from macronet import __version__
 from macronet.domain.four_step import FOUR_STEP_SEQUENCE
 from macronet.ui.assignment_widget import AssignmentWidget
 from macronet.ui.distribution_widget import DistributionWidget
 from macronet.ui.generation_widget import GenerationWidget
 from macronet.ui.mode_choice_widget import ModeChoiceWidget
+from macronet.ui.summary_widget import SummaryWidget
 
 OVERVIEW_STAGES = (
     (
@@ -42,7 +44,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("MacroNet Transport")
+        self.setWindowTitle(f"MacroNet Transport {__version__}")
         self.resize(1100, 760)
 
         tabs = QTabWidget()
@@ -51,15 +53,27 @@ class MainWindow(QMainWindow):
         distribution_widget = DistributionWidget()
         mode_choice_widget = ModeChoiceWidget()
         assignment_widget = AssignmentWidget()
+        summary_widget = SummaryWidget()
         generation_widget.result_calculated.connect(distribution_widget.set_from_generation)
+        generation_widget.result_calculated.connect(summary_widget.set_from_generation)
         distribution_widget.result_calculated.connect(mode_choice_widget.set_from_distribution)
+        distribution_widget.result_calculated.connect(summary_widget.set_from_distribution)
         mode_choice_widget.result_calculated.connect(assignment_widget.set_from_mode_choice)
+        mode_choice_widget.result_calculated.connect(summary_widget.set_from_mode_choice)
+        assignment_widget.result_calculated.connect(
+            lambda result: summary_widget.set_from_assignment(
+                result,
+                assignment_widget.assigned_mode_name,
+            )
+        )
         tabs.addTab(generation_widget, "1. Generación y atracción")
         tabs.addTab(distribution_widget, "2. Distribución")
         tabs.addTab(mode_choice_widget, "3. Elección modal")
         tabs.addTab(assignment_widget, "4. Asignación")
+        tabs.addTab(summary_widget, "Resumen")
 
         if generation_widget.current_result is not None:
+            summary_widget.set_from_generation(generation_widget.current_result)
             distribution_widget.set_from_generation(generation_widget.current_result)
 
         for index, stage in enumerate(FOUR_STEP_SEQUENCE[4:], start=5):

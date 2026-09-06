@@ -4,14 +4,19 @@
 
 El proyecto busca que el estudiante pueda observar el proceso completo, modificar datos y parámetros, revisar ecuaciones y cálculos intermedios, y comprobar cómo cada decisión afecta las etapas posteriores.
 
-## Alcance inicial
+## Alcance actual
 
-La versión `0.1` cubrirá:
+La versión `0.2.0` incluye:
 
 1. Generación y atracción de viajes.
 2. Distribución de viajes.
 3. Elección modal.
 4. Asignación de viajes a la red.
+5. Resumen integrado de resultados.
+
+También permite exportar la matriz origen-destino en CSV, la red asignada en GraphML
+y un informe ampliado en LaTeX. La red GraphML conserva dirección, tiempos de flujo
+libre, capacidades, flujos y relaciones volumen/capacidad para su análisis en Gephi.
 
 Cada módulo deberá separar el modelo matemático de la interfaz gráfica y conservar resultados intermedios para su explicación y validación manual.
 
@@ -26,7 +31,9 @@ Cada módulo deberá separar el modelo matemático de la interfaz gráfica y con
 
 ## Estado
 
-El proyecto se encuentra en su fase inicial de diseño y construcción. Ya incluye un recorrido funcional por las cuatro etapas: generación y atracción, distribución gravitacional, elección modal logit y asignación Todo-o-Nada.
+El proyecto incluye un recorrido funcional por las cuatro etapas: generación y atracción,
+distribución gravitacional, elección modal logit y asignación Todo-o-Nada. La versión
+funcional anterior se conserva en la rama `release/v0.1.0`.
 
 ## Tecnología prevista
 
@@ -61,6 +68,8 @@ pytest
 ## Documentación
 
 El alcance funcional de la primera versión se encuentra en [`docs/scope-v0.1.md`](docs/scope-v0.1.md).
+
+Las incorporaciones de la versión 0.2 se documentan en [`docs/scope-v0.2.md`](docs/scope-v0.2.md).
 
 El caso didáctico incluido en el primer módulo está documentado en [`docs/examples/generation-four-zones.md`](docs/examples/generation-four-zones.md).
 

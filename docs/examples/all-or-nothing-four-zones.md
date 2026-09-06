@@ -6,10 +6,10 @@ Asignar la matriz de viajes en automóvil a una red dirigida. Toda la demanda de
 
 ## Demanda
 
-La elección modal produce 493.380504 viajes en automóvil:
+La elección modal produce 493.380457 viajes en automóvil:
 
-- Viajes intrazonales: 228.160160.
-- Viajes interzonales asignables a la red: 265.220345.
+- Viajes intrazonales: 228.160935.
+- Viajes interzonales asignables a la red: 265.219521.
 
 Los viajes intrazonales permanecen dentro del nodo centroide y no cargan ningún arco.
 
@@ -38,18 +38,18 @@ Los principales resultados interzonales son:
 
 | Origen | Destino | Demanda | Ruta | Costo |
 |---|---|---:|---|---:|
-| Centro | Norte | 21.149754 | Centro → Norte | 6 |
-| Centro | Sur | 10.229486 | Centro → Sur | 9 |
-| Centro | Oriente | 7.193491 | Centro → Sur → Oriente | 13 |
-| Norte | Centro | 46.993305 | Norte → Centro | 6 |
-| Norte | Sur | 18.407700 | Norte → Sur | 5 |
-| Norte | Oriente | 11.803704 | Norte → Sur → Oriente | 9 |
-| Sur | Centro | 27.995767 | Sur → Centro | 9 |
-| Sur | Norte | 22.672918 | Sur → Norte | 5 |
-| Sur | Oriente | 27.617328 | Sur → Oriente | 4 |
-| Oriente | Centro | 22.651906 | Oriente → Sur → Centro | 13 |
-| Oriente | Norte | 16.728333 | Oriente → Sur → Norte | 9 |
-| Oriente | Sur | 31.776651 | Oriente → Sur | 4 |
+| Centro | Norte | 21.150198 | Centro → Norte | 6 |
+| Centro | Sur | 10.229869 | Centro → Sur | 9 |
+| Centro | Oriente | 7.193828 | Centro → Sur → Oriente | 13 |
+| Norte | Centro | 46.993685 | Norte → Centro | 6 |
+| Norte | Sur | 18.408216 | Norte → Sur | 5 |
+| Norte | Oriente | 11.804146 | Norte → Sur → Oriente | 9 |
+| Sur | Centro | 27.995110 | Sur → Centro | 9 |
+| Sur | Norte | 22.672465 | Sur → Norte | 5 |
+| Sur | Oriente | 27.617490 | Sur → Oriente | 4 |
+| Oriente | Centro | 22.650929 | Oriente → Sur → Centro | 13 |
+| Oriente | Norte | 16.727670 | Oriente → Sur → Norte | 9 |
+| Oriente | Sur | 31.775916 | Oriente → Sur | 4 |
 
 Por ejemplo, Centro → Oriente no utiliza el arco directo de costo 16. La ruta Centro → Sur → Oriente tiene costo \(9+4=13\).
 
@@ -65,18 +65,18 @@ donde \(\delta_{a,r_{ij}^{*}}=1\) cuando el arco \(a\) pertenece a la ruta míni
 
 | Arco | Desde | Hasta | Flujo | Capacidad | \(v/c\) |
 |---|---|---|---:|---:|---:|
-| L01 | Centro | Norte | 21.149754 | 50 | 0.423 |
-| L10 | Norte | Centro | 46.993305 | 50 | 0.940 |
-| L02 | Centro | Sur | 17.422977 | 40 | 0.436 |
-| L20 | Sur | Centro | 50.647673 | 40 | 1.266 |
+| L01 | Centro | Norte | 21.150198 | 50 | 0.423 |
+| L10 | Norte | Centro | 46.993685 | 50 | 0.940 |
+| L02 | Centro | Sur | 17.423697 | 40 | 0.436 |
+| L20 | Sur | Centro | 50.646039 | 40 | 1.266 |
 | L03 | Centro | Oriente | 0.000000 | 30 | 0.000 |
 | L30 | Oriente | Centro | 0.000000 | 30 | 0.000 |
-| L12 | Norte | Sur | 30.211404 | 40 | 0.755 |
-| L21 | Sur | Norte | 39.401251 | 40 | 0.985 |
+| L12 | Norte | Sur | 30.212362 | 40 | 0.755 |
+| L21 | Sur | Norte | 39.400135 | 40 | 0.985 |
 | L13 | Norte | Oriente | 0.000000 | 30 | 0.000 |
 | L31 | Oriente | Norte | 0.000000 | 30 | 0.000 |
-| L23 | Sur | Oriente | 46.614523 | 45 | 1.036 |
-| L32 | Oriente | Sur | 71.156891 | 45 | 1.581 |
+| L23 | Sur | Oriente | 46.615463 | 45 | 1.036 |
+| L32 | Oriente | Sur | 71.154516 | 45 | 1.581 |
 
 ## Interpretación crítica
 
@@ -85,3 +85,10 @@ Los valores \(v/c>1\) indican que la asignación de flujo libre concentra más d
 Este resultado no representa un equilibrio de Wardrop. Su función es mostrar con claridad la lógica de rutas mínimas y acumulación de flujos. Una versión posterior podrá incorporar funciones volumen-demora y el algoritmo de Frank–Wolfe.
 
 La red, los tiempos y las capacidades son sintéticos y se utilizan exclusivamente con fines didácticos.
+
+## Exportación de la red
+
+La vista `Red y flujos` puede ampliarse en una ventana independiente. La red también se
+puede descargar en GraphML para abrirla en Gephi o procesarla con NetworkX. El archivo
+conserva, para cada arco, su identificador, dirección, tiempo libre, capacidad, flujo,
+relación volumen/capacidad y estado de utilización.

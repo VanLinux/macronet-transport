@@ -58,14 +58,14 @@ T_{mij}=T_{ij}P_{mij}
 
 ## Ejemplo para Centro → Norte
 
-La matriz de distribución contiene \(T_{ij}=50.494579\) viajes y la impedancia es \(c_{ij}=10\).
+La matriz de distribución contiene \(T_{ij}=50.495638\) viajes y la impedancia es \(c_{ij}=10\).
 
 | Modo | Tiempo | Costo | Utilidad | Probabilidad | Viajes modales |
 |---|---:|---:|---:|---:|---:|
-| Automóvil | 10.0 | 7.5 | −1.8500 | 0.418852 | 21.149754 |
-| Transporte público | 18.5 | 6.0 | −1.9600 | 0.375222 | 18.946672 |
-| Bicicleta | 22.0 | 0.0 | −2.5600 | 0.205926 | 10.398154 |
-| **Total** |  |  |  | **1.000000** | **50.494579** |
+| Automóvil | 10.0 | 7.5 | −1.8500 | 0.418852 | 21.150198 |
+| Transporte público | 18.5 | 6.0 | −1.9600 | 0.375222 | 18.947069 |
+| Bicicleta | 22.0 | 0.0 | −2.5600 | 0.205926 | 10.398372 |
+| **Total** |  |  |  | **1.000000** | **50.495638** |
 
 ## Resultado agregado
 
@@ -73,9 +73,9 @@ Al aplicar el modelo a las 16 relaciones origen-destino se obtiene:
 
 | Modo | Viajes | Participación |
 |---|---:|---:|
-| Automóvil | 493.380504 | 41.115042 % |
-| Transporte público | 431.147624 | 35.928969 % |
-| Bicicleta | 275.471871 | 22.955989 % |
+| Automóvil | 493.380457 | 41.115038 % |
+| Transporte público | 431.147357 | 35.928946 % |
+| Bicicleta | 275.472186 | 22.956016 % |
 | **Total** | **1200.000000** | **100.000000 %** |
 
 ## Interpretación
