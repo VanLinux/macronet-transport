@@ -16,7 +16,14 @@ COSTS = (
 
 
 def test_gravity_model_reproduces_both_marginals() -> None:
-    result = distribute_trips(NAMES, PRODUCTIONS, ATTRACTIONS, COSTS, beta=0.1)
+    result = distribute_trips(
+        NAMES,
+        PRODUCTIONS,
+        ATTRACTIONS,
+        COSTS,
+        beta=0.1,
+        tolerance=1e-6,
+    )
 
     assert result.converged
     assert result.row_totals == pytest.approx(PRODUCTIONS, abs=1e-6)
@@ -24,6 +31,14 @@ def test_gravity_model_reproduces_both_marginals() -> None:
     assert sum(result.row_totals) == pytest.approx(1200.0)
     assert result.friction_matrix[0][0] == pytest.approx(exp(-0.3))
     assert result.friction_matrix[0][3] == pytest.approx(exp(-2.0))
+
+
+def test_default_precision_converges_within_one_hundred_iterations() -> None:
+    result = distribute_trips(NAMES, PRODUCTIONS, ATTRACTIONS, COSTS, beta=0.1)
+
+    assert result.converged
+    assert result.iterations == 7
+    assert result.maximum_error <= 0.01
 
 
 def test_zero_beta_produces_independent_distribution() -> None:

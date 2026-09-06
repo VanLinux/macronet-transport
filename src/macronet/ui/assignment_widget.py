@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 from math import cos, pi, sin
+from pathlib import Path
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from matplotlib.patches import FancyArrowPatch
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QDialog,
+    QFileDialog,
     QGroupBox,
+    QHBoxLayout,
     QHeaderView,
     QLabel,
     QMessageBox,
@@ -27,21 +31,22 @@ from macronet.domain.assignment import (
     Link,
     assign_all_or_nothing,
 )
+from macronet.exporters import save_assignment_graphml
 
 EXAMPLE_NAMES = ("Centro", "Norte", "Sur", "Oriente")
 EXAMPLE_AUTO_DEMAND = (
-    (67.4349768301, 21.1497540242, 10.2294859417, 7.1934912403),
-    (46.9933053497, 54.6003172497, 18.4077000267, 11.8037041215),
-    (27.9957670115, 22.6729179846, 41.6556834365, 27.6173279856),
-    (22.6519061187, 16.7283334396, 31.7766514919, 64.4691820490),
+    (67.4361560353, 21.1501975770, 10.2298692064, 7.1938280208),
+    (46.9936845089, 54.6009480904, 18.4082163313, 11.8041455673),
+    (27.9951097421, 22.6724647044, 41.6555377182, 27.6174896070),
+    (22.6509294563, 16.7276704810, 31.7759162685, 64.4682932079),
 )
 
 
 class NetworkCanvas(FigureCanvasQTAgg):
     """Representa la red y escala cada arco según su flujo."""
 
-    def __init__(self) -> None:
-        self.figure = Figure(figsize=(7, 5))
+    def __init__(self, figsize: tuple[float, float] = (7, 5)) -> None:
+        self.figure = Figure(figsize=figsize)
         super().__init__(self.figure)
 
     def update_network(self, result: AssignmentResult) -> None:
@@ -102,6 +107,8 @@ class NetworkCanvas(FigureCanvasQTAgg):
 class AssignmentWidget(QWidget):
     """Edita la red y muestra rutas, flujos y utilización."""
 
+    result_calculated = Signal(object)
+
     LINK_HEADERS = ("Arco", "Desde", "Hasta", "Tiempo libre", "Capacidad")
 
     def __init__(self) -> None:
@@ -109,9 +116,16 @@ class AssignmentWidget(QWidget):
         self._zone_names = EXAMPLE_NAMES
         self._demand_matrix = EXAMPLE_AUTO_DEMAND
         self._mode_name = "Automóvil"
+        self.current_result: AssignmentResult | None = None
         self._build_ui()
         self._set_zone_nodes(EXAMPLE_NAMES)
         self._restore_network()
+
+    @property
+    def assigned_mode_name(self) -> str:
+        """Nombre del modo cuya matriz se carga en la red."""
+
+        return self._mode_name
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -157,12 +171,26 @@ class AssignmentWidget(QWidget):
         self.flows_table.setHorizontalHeaderLabels(
             ("Arco", "Desde", "Hasta", "Tiempo", "Capacidad", "Flujo", "v/c")
         )
+        network_panel = QWidget()
+        network_layout = QVBoxLayout(network_panel)
         self.network_canvas = NetworkCanvas()
+        network_layout.addWidget(self.network_canvas, stretch=1)
+        network_actions = QHBoxLayout()
+        self.enlarge_graph_button = QPushButton("Ver grafo en grande")
+        self.enlarge_graph_button.setEnabled(False)
+        self.enlarge_graph_button.clicked.connect(self._show_network_large)
+        network_actions.addWidget(self.enlarge_graph_button)
+        self.export_graph_button = QPushButton("Descargar grafo (.graphml)")
+        self.export_graph_button.setEnabled(False)
+        self.export_graph_button.clicked.connect(self._export_graphml)
+        network_actions.addWidget(self.export_graph_button)
+        network_actions.addStretch()
+        network_layout.addLayout(network_actions)
         self._stretch_headers(self.paths_table)
         self._stretch_headers(self.flows_table)
         results.addTab(self.paths_table, "Rutas mínimas")
         results.addTab(self.flows_table, "Flujos por arco")
-        results.addTab(self.network_canvas, "Red y flujos")
+        results.addTab(network_panel, "Red y flujos")
         layout.addWidget(results, stretch=1)
 
         self.summary = QLabel()
@@ -234,6 +262,9 @@ class AssignmentWidget(QWidget):
         self._fill_paths(result)
         self._fill_flows(result)
         self.network_canvas.update_network(result)
+        self.current_result = result
+        self.enlarge_graph_button.setEnabled(True)
+        self.export_graph_button.setEnabled(True)
         maximum_ratio = max(item.volume_capacity_ratio for item in result.link_results)
         self.summary.setText(
             f"<b>Comprobación:</b> demanda total = {result.total_demand:.2f}; "
@@ -241,6 +272,50 @@ class AssignmentWidget(QWidget):
             f"intrazonal = {result.intrazonal_demand:.2f}; "
             f"máximo v/c = {maximum_ratio:.3f}."
         )
+        self.result_calculated.emit(result)
+
+    def _show_network_large(self) -> None:
+        if self.current_result is None:
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Red y flujos — vista ampliada")
+        dialog.resize(1100, 800)
+        layout = QVBoxLayout(dialog)
+        canvas = NetworkCanvas(figsize=(11, 8))
+        canvas.update_network(self.current_result)
+        layout.addWidget(canvas)
+        dialog.exec()
+
+    def _export_graphml(self) -> None:
+        if self.current_result is None:
+            QMessageBox.information(
+                self,
+                "Sin resultados",
+                "Primero debe ejecutar la asignación.",
+            )
+            return
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Guardar red asignada",
+            "red_asignada.graphml",
+            "GraphML (*.graphml)",
+        )
+        if not filename:
+            return
+        path = Path(filename)
+        if path.suffix.casefold() != ".graphml":
+            path = path.with_suffix(".graphml")
+        try:
+            save_assignment_graphml(
+                path,
+                self.current_result,
+                self._read_zone_nodes(),
+                self._mode_name,
+            )
+        except (OSError, ValueError) as error:
+            QMessageBox.critical(self, "No se pudo guardar", str(error))
+            return
+        QMessageBox.information(self, "Exportación terminada", f"Grafo guardado en:\n{path}")
 
     def _restore_network(self) -> None:
         self._set_links(self._default_links(self._zone_names))

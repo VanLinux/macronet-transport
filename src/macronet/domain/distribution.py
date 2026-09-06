@@ -7,6 +7,8 @@ from math import exp, isclose, isfinite
 from typing import TypeAlias
 
 Matrix: TypeAlias = tuple[tuple[float, ...], ...]
+DEFAULT_TOLERANCE = 0.01
+DEFAULT_MAX_ITERATIONS = 100
 
 
 class DistributionError(ValueError):
@@ -54,8 +56,8 @@ def distribute_trips(
     costs: list[list[float]] | tuple[tuple[float, ...], ...],
     beta: float,
     *,
-    tolerance: float = 1e-6,
-    max_iterations: int = 500,
+    tolerance: float = DEFAULT_TOLERANCE,
+    max_iterations: int = DEFAULT_MAX_ITERATIONS,
 ) -> DistributionResult:
     """Distribuye viajes con fricción exponencial y balanceo de Furness.
 

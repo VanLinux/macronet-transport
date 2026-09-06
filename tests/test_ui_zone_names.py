@@ -25,6 +25,13 @@ def test_zone_rename_propagates_without_resetting_network(monkeypatch):
         generation, distribution, modal, assignment = (
             tabs.widget(index) for index in range(1, 5)
         )
+        summary = tabs.widget(5)
+        assert distribution.tolerance_input.value() == pytest.approx(0.01)
+        assert distribution.iterations_input.value() == 100
+        assert distribution.export_button.isEnabled()
+        assert assignment.enlarge_graph_button.isEnabled()
+        assert assignment.export_graph_button.isEnabled()
+        assert summary.export_button.isEnabled()
         distribution.cost_table.item(0, 1).setText("11.5")
         assignment.links_table.item(0, 3).setText("7.5")
         assignment.links_table.item(0, 4).setText("123")
@@ -41,6 +48,7 @@ def test_zone_rename_propagates_without_resetting_network(monkeypatch):
         assert assignment.links_table.item(0, 1).text() == "Zona A"
         assert assignment.links_table.item(0, 3).text() == "7.5"
         assert assignment.links_table.item(0, 4).text() == "123"
+        assert summary.assignment_result.zone_names[0] == "Zona A"
         assert assignment.paths_table.item(0, 0).text() == "Zona A"
 
         # Recalculation alone must not reset custom centroid node identifiers.
@@ -56,6 +64,7 @@ def test_zone_rename_propagates_without_resetting_network(monkeypatch):
         assert assignment.zone_nodes_table.item(0, 1).text() == "N001"
         assert assignment.links_table.item(0, 1).text() == "N001"
         assert assignment.links_table.item(0, 4).text() == "123"
+        assert summary.assignment_result.zone_names[0] == "Zona B"
         texts = [label.text() for label in tabs.widget(0).findChildren(QLabel)]
         assert any("Desarrollador: Héctor Benítez García" in text for text in texts)
     finally:

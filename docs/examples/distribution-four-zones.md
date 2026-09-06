@@ -70,16 +70,21 @@ Los valores se muestran con dos decimales, por lo que las sumas manuales de la t
 
 ## Convergencia
 
-Con una tolerancia de \(10^{-6}\) viajes, el ejemplo converge en 14 iteraciones.
+La interfaz utiliza por defecto una tolerancia de \(0.01\) viajes y un máximo de 100
+iteraciones. Con ese criterio, el ejemplo converge en 7 iteraciones y alcanza un error
+máximo menor que \(0.01\) viajes. El límite de iteraciones es una protección: el cálculo
+termina antes cuando alcanza la tolerancia.
 
 | Iteración | Error máximo en filas | Error máximo en columnas |
 |---:|---:|---:|
 | 1 | 42.726826794 | 0.000000000 |
 | 2 | 8.108881121 | 0.000000000 |
 | 5 | 0.129662021 | 0.000000000 |
-| 10 | 0.000116632 | 0.000000000 |
-| 14 | 0.000000426 | 0.000000000 |
+| 7 | 0.007845990 | 0.000000000 |
 
 El error de columnas es prácticamente cero después de cada iteración porque el último ajuste de cada ciclo se realiza precisamente sobre las columnas. La convergencia se alcanza cuando las filas también respetan sus marginales dentro de la tolerancia.
+
+La matriz OD calculada puede descargarse desde la interfaz en formato CSV. El archivo
+incluye los nombres de las zonas y los totales por origen y destino.
 
 Los datos son sintéticos y tienen una finalidad didáctica. El parámetro \(\beta\) no procede todavía de una calibración empírica.
