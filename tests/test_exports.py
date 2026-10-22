@@ -11,9 +11,11 @@ from macronet.domain.distribution import distribute_trips
 from macronet.domain.generation import GenerationCoefficients, ZoneInput, calculate_generation
 from macronet.domain.mode_choice import ModeSpecification, choose_modes
 from macronet.exporters import (
+    build_modal_csv,
     build_od_csv,
     build_summary_tex,
     save_assignment_graphml,
+    save_modal_csv,
     save_od_csv,
 )
 
@@ -118,6 +120,7 @@ def test_summary_tex_contains_all_four_stages() -> None:
         mode_choice,
         assignment,
         "Automóvil",
+        "Héctor & Grupo_3",
     )
 
     assert r"\section{Generación y atracción}" in content
@@ -125,4 +128,34 @@ def test_summary_tex_contains_all_four_stages() -> None:
     assert r"\section{Elección modal}" in content
     assert r"\section{Asignación}" in content
     assert "Héctor Benítez García" in content
+    assert r"Usuario: Héctor \& Grupo\_3" in content
+    assert r"\documentclass[11pt,letterpaper]{article}" in content
+    assert r"\usepackage[letterpaper,margin=2.5cm]{geometry}" in content
+    assert "fontenc" not in content
     assert r"\end{document}" in content
+
+
+def test_modal_csv_preserves_all_matrices_and_totals(tmp_path) -> None:
+    _, distribution, modal, _ = _four_step_results()
+    rows = list(csv.reader(StringIO(build_modal_csv(modal))))
+    assert rows[0] == ["Modo", "Origen / destino", *NAMES, "Total origen"]
+    for index, mode in enumerate(modal.mode_summaries):
+        block = rows[1 + index * 5 : 1 + (index + 1) * 5]
+        assert all(row[0] == mode.mode_name for row in block)
+        for origin, row in enumerate(block[:-1]):
+            assert row[1] == NAMES[origin]
+            assert list(map(float, row[2:-1])) == pytest.approx(mode.trip_matrix[origin])
+            assert float(row[-1]) == pytest.approx(sum(mode.trip_matrix[origin]))
+        assert block[-1][1] == "Total destino"
+        assert float(block[-1][-1]) == pytest.approx(mode.total_trips)
+    assert sum(float(rows[5 + i * 5][-1]) for i in range(3)) == pytest.approx(
+        sum(distribution.row_totals)
+    )
+    path = tmp_path / "modales.csv"
+    save_modal_csv(path, modal)
+    assert path.read_bytes().startswith(b"\xef\xbb\xbf")
+
+
+def test_report_requires_an_analyst() -> None:
+    with pytest.raises(ValueError, match="nombre"):
+        build_summary_tex(*_four_step_results(), "Automóvil", "   ")

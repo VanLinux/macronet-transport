@@ -6,7 +6,7 @@ El proyecto busca que el estudiante pueda observar el proceso completo, modifica
 
 ## Alcance actual
 
-La versión `0.2.0` incluye:
+La versión `3.0.0` incluye:
 
 1. Generación y atracción de viajes.
 2. Distribución de viajes.
@@ -14,8 +14,10 @@ La versión `0.2.0` incluye:
 4. Asignación de viajes a la red.
 5. Resumen integrado de resultados.
 
-También permite exportar la matriz origen-destino en CSV, la red asignada en GraphML
-y un informe ampliado en LaTeX. La red GraphML conserva dirección, tiempos de flujo
+También permite guardar y reabrir ejercicios completos en `.mnet`, exportar la matriz
+origen-destino y las matrices de los tres modos en CSV, la red asignada en GraphML
+y un informe ampliado en LaTeX con el nombre del usuario. El informe se configura
+en tamaño carta y no utiliza `fontenc`. La red GraphML conserva dirección, tiempos de flujo
 libre, capacidades, flujos y relaciones volumen/capacidad para su análisis en Gephi.
 
 Cada módulo deberá separar el modelo matemático de la interfaz gráfica y conservar resultados intermedios para su explicación y validación manual.
@@ -33,7 +35,31 @@ Cada módulo deberá separar el modelo matemático de la interfaz gráfica y con
 
 El proyecto incluye un recorrido funcional por las cuatro etapas: generación y atracción,
 distribución gravitacional, elección modal logit y asignación Todo-o-Nada. La versión
-funcional anterior se conserva en la rama `release/v0.1.0`.
+funcional anterior se conserva en la rama `release/v0.2.0`; también sigue disponible
+`release/v0.1.0`. La numeración pasa de 0.2.0 a 3.0.0 por decisión del proyecto.
+
+## Guardar, continuar y exportar
+
+- **Archivo → Guardar ejercicio** (`Ctrl+S`) y **Guardar ejercicio como**
+  (`Ctrl+Shift+S`) guardan el ejercicio completo en `.mnet`.
+- **Archivo → Abrir ejercicio** (`Ctrl+O`) recupera zonas, coeficientes,
+  marginales editados, impedancias, parámetros de distribución, los tres modos,
+  centroides, arcos, modo asignado y nombre del usuario. Se reconstruyen los últimos
+  resultados válidos y se conservan las celdas todavía en edición. Pulse el botón
+  de cálculo de la etapa correspondiente para aplicar esos cambios pendientes.
+- El asterisco del título identifica cambios sin guardar. Al abrir otro archivo
+  o cerrar se ofrece guardar, descartar o cancelar.
+- En **Elección modal**, edite los nombres de los tres modos en la primera columna
+  y pulse **Calcular elección modal**. Deben ser únicos y no estar vacíos.
+  **Descargar matrices de todos los modos (.csv)** guarda un único archivo con un
+  bloque de matriz y marginales por modo, etiquetas y precisión numérica.
+- En **Asignación**, elija explícitamente el modo cuya demanda cargará en la red.
+  La selección se conserva al renombrar modos; revise que la red represente ese modo.
+- En **Resumen → Descargar informe (.tex)** se solicita el nombre del usuario
+  en cada exportación. El nombre anterior se ofrece como valor inicial y se guarda
+  en el ejercicio. El archivo se compila con `pdflatex resumen_macronet.tex` para
+  obtener un PDF carta. El programa exporta la fuente `.tex`; no requiere LaTeX
+  para ejecutar los modelos.
 
 ## Tecnología prevista
 
@@ -68,6 +94,10 @@ pytest
 ## Documentación
 
 El alcance funcional de la primera versión se encuentra en [`docs/scope-v0.1.md`](docs/scope-v0.1.md).
+
+Las incorporaciones de la versión 3.0 se documentan en
+[`docs/scope-v3.0.md`](docs/scope-v3.0.md), y su historial en
+[`CHANGELOG.md`](CHANGELOG.md).
 
 Las incorporaciones de la versión 0.2 se documentan en [`docs/scope-v0.2.md`](docs/scope-v0.2.md).
 

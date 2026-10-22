@@ -176,7 +176,7 @@ class DistributionWidget(QWidget):
         self.cost_table.setVerticalHeaderLabels(names)
         self.calculate()
 
-    def calculate(self) -> None:
+    def calculate(self, *, raise_errors: bool = False) -> None:
         try:
             names, productions, attractions = self._read_marginals()
             costs = self._read_costs()
@@ -190,6 +190,8 @@ class DistributionWidget(QWidget):
                 max_iterations=self.iterations_input.value(),
             )
         except (DistributionError, ValueError, AttributeError) as error:
+            if raise_errors:
+                raise
             QMessageBox.warning(self, "Datos no válidos", str(error))
             return
 

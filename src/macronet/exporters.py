@@ -43,6 +43,35 @@ def save_od_csv(path: str | Path, result: DistributionResult) -> None:
     Path(path).write_text(build_od_csv(result), encoding="utf-8-sig", newline="")
 
 
+def build_modal_csv(result: ModeChoiceResult) -> str:
+    """Exporta las tres matrices en un CSV, con un bloque y marginales por modo."""
+
+    output = StringIO(newline="")
+    writer = csv.writer(output, lineterminator="\n")
+    writer.writerow(("Modo", "Origen / destino", *result.zone_names, "Total origen"))
+    for mode in result.mode_summaries:
+        for name, row in zip(result.zone_names, mode.trip_matrix, strict=True):
+            writer.writerow(
+                (mode.mode_name, name, *(format(v, ".12g") for v in row), format(sum(row), ".12g"))
+            )
+        totals = (sum(column) for column in zip(*mode.trip_matrix, strict=True))
+        writer.writerow(
+            (
+                mode.mode_name,
+                "Total destino",
+                *(format(v, ".12g") for v in totals),
+                format(mode.total_trips, ".12g"),
+            )
+        )
+    return output.getvalue()
+
+
+def save_modal_csv(path: str | Path, result: ModeChoiceResult) -> None:
+    """Guarda todas las matrices modales en UTF-8 con BOM."""
+
+    Path(path).write_text(build_modal_csv(result), encoding="utf-8-sig", newline="")
+
+
 def build_assignment_graph(
     result: AssignmentResult,
     zone_nodes: tuple[str, ...],
@@ -59,9 +88,9 @@ def build_assignment_graph(
         }
     )
     zones_by_node = dict(zip(zone_nodes, result.zone_names, strict=True))
-    nodes = {
-        item.link.tail for item in result.link_results
-    } | {item.link.head for item in result.link_results}
+    nodes = {item.link.tail for item in result.link_results} | {
+        item.link.head for item in result.link_results
+    }
     for node in sorted(nodes):
         zone = zones_by_node.get(node, "")
         graph.add_node(
@@ -112,25 +141,27 @@ def build_summary_tex(
     mode_choice: ModeChoiceResult,
     assignment: AssignmentResult,
     assigned_mode: str,
+    analyst_name: str,
 ) -> str:
     """Crea un informe LaTeX autocontenido con los resultados esenciales."""
 
+    if not analyst_name.strip():
+        raise ValueError("Escriba el nombre del usuario que realizó el análisis.")
     critical_link = max(
         assignment.link_results,
         key=lambda item: item.volume_capacity_ratio,
     )
-    overloaded = sum(
-        item.volume_capacity_ratio > 1.0 for item in assignment.link_results
-    )
+    overloaded = sum(item.volume_capacity_ratio > 1.0 for item in assignment.link_results)
     lines = [
-        r"\documentclass[11pt]{article}",
+        r"\documentclass[11pt,letterpaper]{article}",
         r"\usepackage[utf8]{inputenc}",
-        r"\usepackage[T1]{fontenc}",
         r"\usepackage{amsmath}",
         r"\usepackage{booktabs}",
-        r"\usepackage[margin=2.5cm]{geometry}",
+        r"\usepackage[letterpaper,margin=2.5cm]{geometry}",
         r"\title{Resumen del modelo de cuatro etapas}",
-        r"\author{MacroNet Transport\\Desarrollador: Héctor Benítez García}",
+        r"\author{Usuario: "
+        + _latex_escape(analyst_name.strip())
+        + r"\\MacroNet Transport\\Desarrollador: Héctor Benítez García}",
         r"\date{\today}",
         r"\begin{document}",
         r"\maketitle",
@@ -235,6 +266,7 @@ def save_summary_tex(
     mode_choice: ModeChoiceResult,
     assignment: AssignmentResult,
     assigned_mode: str,
+    analyst_name: str,
 ) -> None:
     """Guarda el resumen como fuente LaTeX UTF-8."""
 
@@ -244,6 +276,7 @@ def save_summary_tex(
         mode_choice,
         assignment,
         assigned_mode,
+        analyst_name,
     )
     Path(path).write_text(content, encoding="utf-8")
 

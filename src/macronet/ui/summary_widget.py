@@ -5,11 +5,12 @@ from __future__ import annotations
 from html import escape
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFileDialog,
     QGroupBox,
     QHeaderView,
+    QInputDialog,
     QLabel,
     QMessageBox,
     QPushButton,
@@ -29,6 +30,8 @@ from macronet.exporters import save_summary_tex
 class SummaryWidget(QWidget):
     """Concentra los indicadores esenciales de las cuatro etapas."""
 
+    analyst_changed = Signal()
+
     def __init__(self) -> None:
         super().__init__()
         self.generation_result: GenerationResult | None = None
@@ -36,6 +39,7 @@ class SummaryWidget(QWidget):
         self.mode_choice_result: ModeChoiceResult | None = None
         self.assignment_result: AssignmentResult | None = None
         self.assigned_mode = "Automóvil"
+        self.analyst_name = ""
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -178,6 +182,21 @@ class SummaryWidget(QWidget):
             )
             return
 
+        analyst, accepted = QInputDialog.getText(
+            self,
+            "Usuario del informe",
+            "Nombre del usuario que realizó el análisis:",
+            text=self.analyst_name,
+        )
+        if not accepted:
+            return
+        if not analyst.strip():
+            QMessageBox.warning(self, "Nombre requerido", "Escriba un nombre para el informe.")
+            return
+        if self.analyst_name != analyst.strip():
+            self.analyst_name = analyst.strip()
+            self.analyst_changed.emit()
+
         filename, _ = QFileDialog.getSaveFileName(
             self,
             "Guardar informe LaTeX",
@@ -197,6 +216,7 @@ class SummaryWidget(QWidget):
                 self.mode_choice_result,
                 self.assignment_result,
                 self.assigned_mode,
+                self.analyst_name,
             )
         except OSError as error:
             QMessageBox.critical(self, "No se pudo guardar", str(error))

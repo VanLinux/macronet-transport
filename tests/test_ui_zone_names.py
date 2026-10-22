@@ -19,6 +19,9 @@ def test_zone_rename_propagates_without_resetting_network(monkeypatch):
         pytest.fail(f"Unexpected UI warning: {args[2]}")
 
     monkeypatch.setattr(QMessageBox, "warning", unexpected_warning)
+    monkeypatch.setattr(
+        QMessageBox, "question", lambda *args: QMessageBox.StandardButton.Discard
+    )
     window = MainWindow()
     try:
         tabs = window.centralWidget()

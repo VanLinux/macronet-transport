@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
+    QFileDialog,
     QGridLayout,
     QGroupBox,
     QHeaderView,
@@ -25,6 +28,7 @@ from macronet.domain.mode_choice import (
     ModeSpecification,
     choose_modes,
 )
+from macronet.exporters import save_modal_csv
 
 EXAMPLE_NAMES = ("Centro", "Norte", "Sur", "Oriente")
 EXAMPLE_IMPEDANCES = (
@@ -81,6 +85,8 @@ class ModeChoiceWidget(QWidget):
             "Esta etapa reparte cada celda de la matriz OD entre los modos disponibles "
             "mediante funciones de utilidad y un modelo logit multinomial. Modifique los "
             "parámetros para observar cómo cambian las participaciones."
+            " Puede cambiar los nombres de los tres modos en la primera columna; "
+            "use nombres únicos y pulse Calcular elección modal."
         )
         explanation.setWordWrap(True)
         layout.addWidget(explanation)
@@ -121,6 +127,11 @@ class ModeChoiceWidget(QWidget):
         results.addTab(self.summary_table, "Totales por modo")
         results.addTab(self.modal_matrices_tabs, "Matrices modales")
         layout.addWidget(results, stretch=1)
+
+        self.export_button = QPushButton("Descargar matrices de todos los modos (.csv)")
+        self.export_button.setEnabled(False)
+        self.export_button.clicked.connect(self._export_modal_csv)
+        layout.addWidget(self.export_button)
 
         self.summary = QLabel()
         self.summary.setTextFormat(Qt.TextFormat.RichText)
@@ -172,7 +183,7 @@ class ModeChoiceWidget(QWidget):
         self._populate_od_selector()
         self.calculate()
 
-    def calculate(self) -> None:
+    def calculate(self, *, raise_errors: bool = False) -> None:
         try:
             modes = self._read_modes()
             result = choose_modes(
@@ -184,10 +195,13 @@ class ModeChoiceWidget(QWidget):
                 self.cost_coefficient_input.value(),
             )
         except (ModeChoiceError, ValueError, AttributeError) as error:
+            if raise_errors:
+                raise
             QMessageBox.warning(self, "Datos no válidos", str(error))
             return
 
         self.current_result = result
+        self.export_button.setEnabled(True)
         self._fill_summary(result)
         self._fill_modal_matrices(result)
         self._display_selected_od()
@@ -196,6 +210,24 @@ class ModeChoiceWidget(QWidget):
             f"Σ de participaciones = {sum(mode.share for mode in result.mode_summaries):.6f}."
         )
         self.result_calculated.emit(result)
+
+    def _export_modal_csv(self) -> None:
+        if self.current_result is None:
+            return
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "Guardar matrices modales", "matrices_modales.csv", "Archivo CSV (*.csv)"
+        )
+        if not filename:
+            return
+        path = Path(filename)
+        if path.suffix.casefold() != ".csv":
+            path = path.with_suffix(".csv")
+        try:
+            save_modal_csv(path, self.current_result)
+        except OSError as error:
+            QMessageBox.critical(self, "No se pudo guardar", str(error))
+            return
+        QMessageBox.information(self, "Exportación terminada", f"Matrices guardadas en:\n{path}")
 
     def _restore_defaults(self) -> None:
         self.time_coefficient_input.setValue(-0.08)
