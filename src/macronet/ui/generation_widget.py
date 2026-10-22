@@ -156,7 +156,7 @@ class GenerationWidget(QWidget):
                 self._set_result_item(row, column, "—")
         self.calculate()
 
-    def calculate(self) -> None:
+    def calculate(self, *, raise_errors: bool = False) -> None:
         try:
             zones = [self._read_zone(row) for row in range(self.table.rowCount())]
             coefficients = GenerationCoefficients(
@@ -164,6 +164,8 @@ class GenerationWidget(QWidget):
             )
             result = calculate_generation(zones, coefficients)
         except (GenerationError, ValueError) as error:
+            if raise_errors:
+                raise
             QMessageBox.warning(self, "Datos no válidos", str(error))
             return
 

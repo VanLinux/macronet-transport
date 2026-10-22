@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from html import escape
 from math import cos, pi, sin
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from matplotlib.figure import Figure
 from matplotlib.patches import FancyArrowPatch
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QComboBox,
     QDialog,
     QFileDialog,
     QGroupBox,
@@ -116,6 +118,7 @@ class AssignmentWidget(QWidget):
         self._zone_names = EXAMPLE_NAMES
         self._demand_matrix = EXAMPLE_AUTO_DEMAND
         self._mode_name = "Automóvil"
+        self._mode_choice_result = None
         self.current_result: AssignmentResult | None = None
         self._build_ui()
         self._set_zone_nodes(EXAMPLE_NAMES)
@@ -141,6 +144,12 @@ class AssignmentWidget(QWidget):
         self.explanation.setWordWrap(True)
         layout.addWidget(self.explanation)
         layout.addWidget(self._build_equations_group())
+
+        layout.addWidget(QLabel("Modo que se asignará a esta red:"))
+        self.mode_selector = QComboBox()
+        self.mode_selector.addItem(self._mode_name)
+        self.mode_selector.currentIndexChanged.connect(self._select_mode)
+        layout.addWidget(self.mode_selector)
 
         self.zone_nodes_table = QTableWidget(0, 2)
         self.zone_nodes_table.setHorizontalHeaderLabels(("Zona", "Nodo centroide"))
@@ -212,13 +221,17 @@ class AssignmentWidget(QWidget):
         return group
 
     def set_from_mode_choice(self, mode_choice_result: object) -> None:
-        """Recibe la matriz de automóvil producida en la etapa 3."""
+        """Recibe las matrices y conserva la alternativa elegida aunque se renombre."""
 
+        self._mode_choice_result = mode_choice_result
         summaries = mode_choice_result.mode_summaries
-        selected = next(
-            (mode for mode in summaries if "autom" in mode.mode_name.casefold()),
-            summaries[0],
-        )
+        index = max(0, min(self.mode_selector.currentIndex(), len(summaries) - 1))
+        self.mode_selector.blockSignals(True)
+        self.mode_selector.clear()
+        self.mode_selector.addItems([mode.mode_name for mode in summaries])
+        self.mode_selector.setCurrentIndex(index)
+        self.mode_selector.blockSignals(False)
+        selected = summaries[index]
         new_names = mode_choice_result.zone_names
         old_names = self._zone_names
         self._zone_names = new_names
@@ -240,7 +253,15 @@ class AssignmentWidget(QWidget):
                     item.setText(renames.get(item.text(), item.text()))
         self.calculate()
 
-    def calculate(self) -> None:
+    def _select_mode(self, index: int) -> None:
+        if self._mode_choice_result is None or index < 0:
+            return
+        selected = self._mode_choice_result.mode_summaries[index]
+        self._mode_name = selected.mode_name
+        self._demand_matrix = selected.trip_matrix
+        self.calculate()
+
+    def calculate(self, *, raise_errors: bool = False) -> None:
         try:
             zone_nodes = self._read_zone_nodes()
             links = self._read_links()
@@ -251,11 +272,13 @@ class AssignmentWidget(QWidget):
                 links,
             )
         except (AssignmentError, ValueError, AttributeError) as error:
+            if raise_errors:
+                raise
             QMessageBox.warning(self, "Datos no válidos", str(error))
             return
 
         self.explanation.setText(
-            f"Se asigna la matriz modal de {self._mode_name} mediante Todo-o-Nada y rutas "
+            f"Se asigna la matriz modal de {escape(self._mode_name)} mediante Todo-o-Nada y rutas "
             "mínimas de Dijkstra. La capacidad no modifica las rutas; se utiliza únicamente "
             "para calcular v/c."
         )
@@ -336,8 +359,7 @@ class AssignmentWidget(QWidget):
             )
         else:
             specifications = tuple(
-                (index, (index + 1) % len(names), 6.0, 180.0)
-                for index in range(len(names))
+                (index, (index + 1) % len(names), 6.0, 180.0) for index in range(len(names))
             )
         links: list[Link] = []
         for first, second, travel_time, capacity in specifications:

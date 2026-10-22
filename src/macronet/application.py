@@ -3,16 +3,32 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QTabWidget, QVBoxLayout, QWidget
+from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
+from PySide6.QtWidgets import (
+    QApplication,
+    QDoubleSpinBox,
+    QFileDialog,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QSpinBox,
+    QTableWidget,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 from macronet import __version__
 from macronet.domain.four_step import FOUR_STEP_SEQUENCE
+from macronet.project import ProjectError, load_project, save_project
 from macronet.ui.assignment_widget import AssignmentWidget
 from macronet.ui.distribution_widget import DistributionWidget
 from macronet.ui.generation_widget import GenerationWidget
 from macronet.ui.mode_choice_widget import ModeChoiceWidget
+from macronet.ui.project_state import capture_document, capture_inputs, restore_document
 from macronet.ui.summary_widget import SummaryWidget
 
 OVERVIEW_STAGES = (
@@ -46,8 +62,142 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle(f"MacroNet Transport {__version__}")
         self.resize(1100, 760)
+        self.project_path: Path | None = None
+        self._dirty = False
+        self._install_tabs(ExerciseTabs())
+        file_menu = self.menuBar().addMenu("Archivo")
+        for title, shortcut, callback in (
+            ("Abrir ejercicio (.mnet)…", QKeySequence.StandardKey.Open, self._open_project),
+            ("Guardar ejercicio", QKeySequence.StandardKey.Save, self._save_project),
+            ("Guardar ejercicio como…", QKeySequence.StandardKey.SaveAs, self._save_project_as),
+        ):
+            action = QAction(title, self)
+            action.setShortcut(shortcut)
+            action.triggered.connect(callback)
+            file_menu.addAction(action)
+        self._update_title()
 
-        tabs = QTabWidget()
+    def _install_tabs(self, tabs) -> None:
+        self.setCentralWidget(tabs)
+        for table in tabs.findChildren(QTableWidget):
+            table.itemChanged.connect(self._mark_dirty)
+        for spin in (*tabs.findChildren(QDoubleSpinBox), *tabs.findChildren(QSpinBox)):
+            spin.valueChanged.connect(self._mark_dirty)
+        tabs.widget(4).mode_selector.currentIndexChanged.connect(self._mark_dirty)
+        tabs.widget(5).analyst_changed.connect(self._mark_dirty)
+
+    def _mark_dirty(self, *_args) -> None:
+        self._dirty = True
+        self._update_title()
+
+    def _update_title(self) -> None:
+        name = self.project_path.name if self.project_path else "Ejercicio nuevo"
+        self.setWindowTitle(
+            f"MacroNet Transport {__version__} — {name}{' *' if self._dirty else ''}"
+        )
+        self.statusBar().showMessage(
+            "Cambios sin guardar · Archivo → Guardar ejercicio (.mnet)"
+            if self._dirty
+            else str(self.project_path)
+            if self.project_path
+            else "Archivo → Abrir o Guardar ejercicio (.mnet) para continuar después."
+        )
+
+    def _save_project_as(self) -> bool:
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Guardar ejercicio completo",
+            str(self.project_path or "ejercicio.mnet"),
+            "Ejercicio MacroNet (*.mnet)",
+        )
+        if not filename:
+            return False
+        path = Path(filename)
+        if path.suffix.casefold() != ".mnet":
+            path = path.with_suffix(".mnet")
+        return self._write_project(path)
+
+    def _save_project(self) -> bool:
+        return (
+            self._write_project(self.project_path) if self.project_path else self._save_project_as()
+        )
+
+    def _write_project(self, path: Path) -> bool:
+        try:
+            save_project(path, capture_document(self.centralWidget()))
+        except (OSError, ValueError) as error:
+            QMessageBox.critical(self, "No se pudo guardar el ejercicio", str(error))
+            return False
+        self.project_path = path
+        self._dirty = False
+        self._update_title()
+        return True
+
+    def _confirm_unsaved(self) -> bool:
+        if not self._dirty:
+            return True
+        answer = QMessageBox.question(
+            self,
+            "Cambios sin guardar",
+            "¿Desea guardar el ejercicio antes de continuar?",
+            QMessageBox.StandardButton.Save
+            | QMessageBox.StandardButton.Discard
+            | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Save,
+        )
+        if answer == QMessageBox.StandardButton.Save:
+            return self._save_project()
+        return answer == QMessageBox.StandardButton.Discard
+
+    def _open_project(self) -> None:
+        filename, _ = QFileDialog.getOpenFileName(
+            self, "Abrir ejercicio", "", "Ejercicio MacroNet (*.mnet)"
+        )
+        if not filename:
+            return
+        self.open_project_path(Path(filename))
+
+    def open_project_path(self, path: Path) -> bool:
+        """Prepara una vista completa y solo la sustituye si el archivo es válido."""
+
+        candidate = None
+        try:
+            document = load_project(path)
+            candidate = ExerciseTabs()
+            restore_document(candidate, document)
+        except (OSError, ProjectError, ValueError, AttributeError, OverflowError) as error:
+            if candidate is not None:
+                candidate.deleteLater()
+            QMessageBox.critical(self, "No se pudo abrir el ejercicio", str(error))
+            return False
+        if not self._confirm_unsaved():
+            candidate.deleteLater()
+            return False
+        self._install_tabs(candidate)
+        self.project_path = path
+        self._dirty = False
+        self._update_title()
+        if document["draft"] != document["calculated"]:
+            self.statusBar().showMessage(
+                "Ejercicio abierto con cambios pendientes de calcular. "
+                "Los resultados muestran el último cálculo válido."
+            )
+        return True
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        if self._confirm_unsaved():
+            event.accept()
+        else:
+            event.ignore()
+
+
+class ExerciseTabs(QTabWidget):
+    """Ejercicio independiente que puede validarse antes de sustituir el abierto."""
+
+    def __init__(self) -> None:
+        super().__init__()
+
+        tabs = self
         tabs.addTab(self._build_overview(), "Inicio")
         generation_widget = GenerationWidget()
         distribution_widget = DistributionWidget()
@@ -85,7 +235,22 @@ class MainWindow(QMainWindow):
             tabs.addTab(placeholder, f"{index}. {stage.display_name}")
             tabs.setTabEnabled(tabs.count() - 1, False)
 
-        self.setCentralWidget(tabs)
+        self.stages = dict(
+            zip(
+                ("generation", "distribution", "modal", "assignment"),
+                (generation_widget, distribution_widget, mode_choice_widget, assignment_widget),
+                strict=True,
+            )
+        )
+        self.calculated_states = {
+            stage: capture_inputs(stage, widget) for stage, widget in self.stages.items()
+        }
+        for stage, widget in self.stages.items():
+            widget.result_calculated.connect(
+                lambda _result, stage=stage, widget=widget: self.calculated_states.update(
+                    {stage: capture_inputs(stage, widget)}
+                )
+            )
 
     @staticmethod
     def _build_overview() -> QWidget:
@@ -112,9 +277,7 @@ class MainWindow(QMainWindow):
 
         layout.addStretch()
 
-        credits = QLabel(
-            "Software libre (GPL-3.0) · Desarrollador: Héctor Benítez García"
-        )
+        credits = QLabel("Software libre (GPL-3.0) · Desarrollador: Héctor Benítez García")
         credits.setAlignment(Qt.AlignmentFlag.AlignCenter)
         credits.setStyleSheet("font-size: 12px; padding: 6px;")
         layout.addWidget(credits)
