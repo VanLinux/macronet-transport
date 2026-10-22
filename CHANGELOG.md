@@ -14,7 +14,10 @@ Entrega solicitada como versión 3.0; sucede directamente a 0.2.0.
 - CSV de las matrices de todos los modos, con marginales y nombres personalizados.
 - Nombres editables de los tres modos documentados y verificados en todas las etapas.
 - Selector explícito del modo a asignar, conservado al renombrar alternativas.
-- Pruebas automatizadas ampliadas y CI en Ubuntu/Windows, Python 3.11/3.12.
+- Confirmación de la celda activa al guardar con Ctrl+S o cerrar la aplicación.
+- Pruebas automatizadas ampliadas y CI en Ubuntu/Windows, Python 3.11/3.12/3.14.
+- Dependencia Qt limitada a versiones anteriores a 6.12 tras reproducir un fallo
+  de destrucción de tablas en PySide6 6.12.0 con Python 3.11; verificada 6.11.2.
 - Versión 0.2.0 preservada en `release/v0.2.0` antes del desarrollo.
 
 ## 0.2.0 — 2026-09-06

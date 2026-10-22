@@ -123,6 +123,7 @@ class MainWindow(QMainWindow):
         )
 
     def _write_project(self, path: Path) -> bool:
+        self._commit_pending_editor()
         try:
             save_project(path, capture_document(self.centralWidget()))
         except (OSError, ValueError) as error:
@@ -134,6 +135,7 @@ class MainWindow(QMainWindow):
         return True
 
     def _confirm_unsaved(self) -> bool:
+        self._commit_pending_editor()
         if not self._dirty:
             return True
         answer = QMessageBox.question(
@@ -148,6 +150,13 @@ class MainWindow(QMainWindow):
         if answer == QMessageBox.StandardButton.Save:
             return self._save_project()
         return answer == QMessageBox.StandardButton.Discard
+
+    def _commit_pending_editor(self) -> None:
+        """Confirma la celda activa también al guardar mediante Ctrl+S o cerrar."""
+
+        focused = QApplication.focusWidget()
+        if focused is not None and self.isAncestorOf(focused):
+            focused.clearFocus()
 
     def _open_project(self) -> None:
         filename, _ = QFileDialog.getOpenFileName(
@@ -210,12 +219,7 @@ class ExerciseTabs(QTabWidget):
         distribution_widget.result_calculated.connect(summary_widget.set_from_distribution)
         mode_choice_widget.result_calculated.connect(assignment_widget.set_from_mode_choice)
         mode_choice_widget.result_calculated.connect(summary_widget.set_from_mode_choice)
-        assignment_widget.result_calculated.connect(
-            lambda result: summary_widget.set_from_assignment(
-                result,
-                assignment_widget.assigned_mode_name,
-            )
-        )
+        assignment_widget.result_calculated.connect(self._update_assignment_summary)
         tabs.addTab(generation_widget, "1. Generación y atracción")
         tabs.addTab(distribution_widget, "2. Distribución")
         tabs.addTab(mode_choice_widget, "3. Elección modal")
@@ -245,12 +249,18 @@ class ExerciseTabs(QTabWidget):
         self.calculated_states = {
             stage: capture_inputs(stage, widget) for stage, widget in self.stages.items()
         }
+        for widget in self.stages.values():
+            widget.result_calculated.connect(self._capture_calculated_state)
+
+    def _capture_calculated_state(self, _result: object) -> None:
+        sender = self.sender()
         for stage, widget in self.stages.items():
-            widget.result_calculated.connect(
-                lambda _result, stage=stage, widget=widget: self.calculated_states.update(
-                    {stage: capture_inputs(stage, widget)}
-                )
-            )
+            if widget is sender:
+                self.calculated_states[stage] = capture_inputs(stage, widget)
+                break
+
+    def _update_assignment_summary(self, result: object) -> None:
+        self.widget(5).set_from_assignment(result, self.widget(4).assigned_mode_name)
 
     @staticmethod
     def _build_overview() -> QWidget:

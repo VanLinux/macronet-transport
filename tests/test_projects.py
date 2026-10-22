@@ -7,6 +7,7 @@ import os
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+from PySide6.QtCore import QEvent  # noqa: E402
 from PySide6.QtGui import QCloseEvent  # noqa: E402
 from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMessageBox  # noqa: E402
 
@@ -16,8 +17,7 @@ from macronet.ui.project_state import capture_document  # noqa: E402
 
 
 @pytest.fixture
-def window(monkeypatch):
-    app = QApplication.instance() or QApplication([])
+def window(monkeypatch, qt_app):
     monkeypatch.setattr(QMessageBox, "question", lambda *a: QMessageBox.StandardButton.Discard)
     monkeypatch.setattr(QMessageBox, "information", lambda *a: None)
     monkeypatch.setattr(QMessageBox, "warning", lambda *a: pytest.fail(str(a)))
@@ -26,6 +26,16 @@ def window(monkeypatch):
     yield window
     window._dirty = False
     window.close()
+    window.deleteLater()
+    qt_app.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    qt_app.processEvents()
+
+
+@pytest.fixture(scope="session")
+def qt_app():
+    app = QApplication.instance() or QApplication([])
+    yield app
+    app.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     app.processEvents()
 
 
@@ -181,7 +191,7 @@ def test_report_prompts_name_every_time_and_can_cancel(window, tmp_path, monkeyp
     summary._export_tex()
     summary._export_tex()
     assert prompts == ["", "María & López_1"]
-    assert r"Usuario: María \& López\_1" in path.read_text()
+    assert r"Usuario: María \& López\_1" in path.read_text(encoding="utf-8")
     assert window._dirty
     before = path.read_bytes()
     monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("", False))
@@ -213,3 +223,28 @@ def test_mode_names_and_assignment_selection_survive_renaming(window):
     )
     assert tabs.widget(5).assigned_mode == "Motocicleta"
     assert modal.modal_matrices_tabs.tabText(2) == "Motocicleta"
+
+
+def test_active_cell_editor_is_committed_before_save_or_close(window, tmp_path, monkeypatch):
+    window.show()
+    tabs = window.centralWidget()
+    tabs.setCurrentIndex(1)
+    table = tabs.widget(1).table
+    app = QApplication.instance()
+    app.processEvents()
+    table.setCurrentCell(0, 1)
+    table.editItem(table.item(0, 1))
+    app.processEvents()
+    app.focusWidget().setText("999")
+    path = tmp_path / "editor.mnet"
+    assert window._write_project(path)
+    assert load_project(path)["draft"]["generation"]["table"][0][1] == "999"
+    table.editItem(table.item(0, 1))
+    app.processEvents()
+    app.focusWidget().setText("888")
+    monkeypatch.setattr(QMessageBox, "question", lambda *a: QMessageBox.StandardButton.Cancel)
+    event = QCloseEvent()
+    window.closeEvent(event)
+    assert not event.isAccepted()
+    assert window._dirty
+    assert table.item(0, 1).text() == "888"

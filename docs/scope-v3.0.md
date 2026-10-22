@@ -46,7 +46,11 @@ si existen cambios sin guardar.
 Las pruebas cubren reanudación completa y continuación de cálculos, borradores,
 marginales personalizados, red, selector modal, archivos dañados o incompatibles,
 escritura fallida, cancelación, nombre del informe y formato carta, CSV modal,
-CSV OD y GraphML. CI ejecuta lint y pytest en Ubuntu y Windows, Python 3.11/3.12.
+CSV OD y GraphML. CI ejecuta lint y pytest en Ubuntu y Windows, Python 3.11/3.12/3.14.
+Se confirma el contenido de la celda activa antes de guardar o cerrar, incluso
+si el usuario todavía está escribiendo. Se limita PySide6 a versiones anteriores
+a 6.12: con 6.12.0 se reprodujo un aborto al destruir tablas en Python 3.11,
+también con el código de 0.2.0; las mismas pruebas terminan con 6.11.2.
 Estas pruebas no equivalen a validar un instalador ni la apariencia en todos los
 escritorios. El caso didáctico sigue siendo sintético y la asignación Todo-o-Nada
 no representa equilibrio ni actualiza tiempos por congestión.
