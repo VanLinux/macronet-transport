@@ -169,6 +169,9 @@ class MainWindow(QMainWindow):
     def open_project_path(self, path: Path) -> bool:
         """Prepara una vista completa y solo la sustituye si el archivo es válido."""
 
+        # Guardar antes de leer evita reabrir una copia antigua del mismo archivo.
+        if not self._confirm_unsaved():
+            return False
         candidate = None
         try:
             document = load_project(path)
@@ -178,9 +181,6 @@ class MainWindow(QMainWindow):
             if candidate is not None:
                 candidate.deleteLater()
             QMessageBox.critical(self, "No se pudo abrir el ejercicio", str(error))
-            return False
-        if not self._confirm_unsaved():
-            candidate.deleteLater()
             return False
         self._install_tabs(candidate)
         self.project_path = path

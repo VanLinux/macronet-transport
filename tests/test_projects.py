@@ -248,3 +248,12 @@ def test_active_cell_editor_is_committed_before_save_or_close(window, tmp_path, 
     assert not event.isAccepted()
     assert window._dirty
     assert table.item(0, 1).text() == "888"
+
+
+def test_reopening_current_file_reads_newly_saved_edits(window, tmp_path, monkeypatch):
+    path = tmp_path / "mismo_ejercicio.mnet"
+    assert window._write_project(path)
+    window.centralWidget().widget(1).table.item(0, 1).setText("999")
+    monkeypatch.setattr(QMessageBox, "question", lambda *a: QMessageBox.StandardButton.Save)
+    assert window.open_project_path(path)
+    assert window.centralWidget().widget(1).table.item(0, 1).text() == "999"
