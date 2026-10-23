@@ -1,5 +1,29 @@
 # Bitácora de versiones — MacroNet Transport
 
+## 3.1.0 — 2026-10-22
+
+Actualización de la familia 3.x según la propuesta de calibración y asignación;
+se conserva el flujo manual y AON como selección inicial.
+
+- Asignación Wardrop UE por Frank–Wolfe con BPR editable (α=0.15, β=4), brecha
+  relativa, límite de actualizaciones, estado de convergencia e historial gráfico.
+- Comparación reproducible AON/UE sobre la misma OD y red; evaluación BPR de
+  flujos AON sin alterar las rutas de flujo libre; CSV comparativo y GraphML con tiempos.
+- Motor de calibración independiente de Qt: OLS para producción y atracción,
+  Poisson/NB2 habilitables, calibración de gravedad con Furness completo y MNL
+  desagregado con disponibilidad e identificación mediante ASC de referencia cero.
+- Importación CSV con mapeo de columnas, plantillas, diagnóstico, intervalos,
+  residuales, cuotas modales y aplicación explícita; controles manuales conservados.
+- Funciones de fricción potencia y combinada habilitables; exponencial predeterminada.
+- `.mnet` esquema 2: observaciones, mapeo, procedencia, modelos y diagnósticos por
+  etapa, configuración de asignación y resultados auditables; apertura de esquema 1.
+- Reportes carta sin `fontenc`, con parámetros, diagnósticos y comparación de asignación.
+- Interfaz neutral en grises, tipografía Latin Modern Roman incluida con su licencia,
+  temas claro/oscuro/sistema y desplazamiento para pantallas pequeñas.
+- Pruebas analíticas del ejercicio lineal 500/500 vehículos y 20/20 minutos,
+  conservación de flujo, estimación, sesiones antiguas y reapertura completa.
+- Autoría y licencia GPL-3.0-only preservadas. No se cambia a versión 4.
+
 ## 3.0.0 — 2026-10-22
 
 Entrega solicitada como versión 3.0; sucede directamente a 0.2.0.
