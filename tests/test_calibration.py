@@ -45,6 +45,7 @@ def test_optional_count_models_and_log_link(model):
     assert fit.metrics["log_likelihood"] < 0
     if model == "negative_binomial":
         assert fit.metrics["NB2_dispersion"] == pytest.approx(0.5, abs=0.1)
+        assert fit.metrics["Pearson_dispersion"] == pytest.approx(1, abs=0.15)
     coefficients = GenerationCoefficients(
         production_intercept=1, production_households=0.3, production_vehicles=0.2
     )

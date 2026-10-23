@@ -145,6 +145,10 @@ def fit_generation(
             if dispersion <= 1e-7 or not np.isfinite(dispersion):
                 raise CalibrationError("La dispersión NB2 no está identificada; pruebe Poisson.")
             metrics["NB2_dispersion"] = dispersion
+            variance = predicted + dispersion * predicted**2
+            metrics["Pearson_dispersion"] = float(
+                np.sum((y - predicted) ** 2 / variance) / (len(y) - p)
+            )
     if validation is not None:
         vx, vy = _array(validation[0], ndim=2), _array(validation[1], ndim=1)
         if vx.shape[1] != x.shape[1] or len(vx) != len(vy) or np.any(vx < 0) or np.any(vy < 0):
