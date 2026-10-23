@@ -1,5 +1,16 @@
 # Bitácora de versiones — MacroNet Transport
 
+## 3.1.1 — 2026-10-23
+
+- Corregido el crecimiento continuo de las gráficas al abrir **Convergencia UE**
+  dentro de la ventana completa, que podía bloquear la aplicación y provocar
+  una violación de segmento. El tamaño recomendado del lienzo se conserva
+  independiente del tamaño asignado por el diseño de Qt.
+- Prueba de regresión con la ventana visible y el bucle de eventos activo:
+  convergencia UE, cambios de pestaña, redimensionamiento, temas claro/oscuro y
+  conservación del historial numérico. Se ejecuta en un proceso separado para
+  detectar bloqueos y cierres nativos.
+
 ## 3.1.0 — 2026-10-22
 
 Actualización de la familia 3.x según la propuesta de calibración y asignación;

@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
-from PySide6.QtCore import QEvent, QObject, Qt
+from PySide6.QtCore import QEvent, QObject, QSize, Qt
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QPalette
 from PySide6.QtWidgets import (
     QApplication,
@@ -182,6 +182,17 @@ class Appearance(QObject):
 
 class AdaptiveCanvas(FigureCanvasQTAgg):
     """Aplica el contraste también a gráficas creadas o recalculadas después del tema."""
+
+    def __init__(self, figure=None):
+        super().__init__(figure)
+        self._preferred_size = QSize(*self.get_width_height())
+
+    def sizeHint(self):
+        # Matplotlib usa el tamaño actual de la figura como tamaño recomendado.
+        # En pestañas dentro de un área desplazable eso realimenta el diseño:
+        # cada ajuste del lienzo puede solicitar otro ajuste de sus contenedores.
+        # Conserva la preferencia inicial; el lienzo sigue adaptándose al espacio.
+        return QSize(self._preferred_size)
 
     def draw(self, *args, **kwargs):
         dark = self.palette().color(QPalette.ColorRole.Window).lightness() < 128
