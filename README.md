@@ -6,7 +6,7 @@ El proyecto busca que el estudiante pueda observar el proceso completo, modifica
 
 ## Alcance actual
 
-La versión `3.1.0` (familia **3.x**) incluye:
+La versión `3.1.1` (familia **3.x**) incluye:
 
 1. Generación y atracción de viajes.
 2. Distribución de viajes.
