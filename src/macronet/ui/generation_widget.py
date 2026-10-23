@@ -25,6 +25,7 @@ from macronet.domain.generation import (
     ZoneInput,
     calculate_generation,
 )
+from macronet.ui.calibration_widget import CalibrationPanel
 
 EXAMPLE_ZONES = (
     ("Centro", 100, 60, 200, 100),
@@ -55,6 +56,8 @@ class GenerationWidget(QWidget):
         super().__init__()
         self.current_result = None
         self._coefficient_inputs: dict[str, QDoubleSpinBox] = {}
+        self.production_model = "ols"
+        self.attraction_model = "ols"
         self._build_ui()
         self._load_example()
 
@@ -77,6 +80,11 @@ class GenerationWidget(QWidget):
 
         layout.addWidget(self._build_equations_group())
         layout.addWidget(self._build_coefficients_group())
+        self.calibration = CalibrationPanel("generation", lambda: {}, self._apply_estimate)
+        layout.addWidget(self.calibration)
+        self.model_label = QLabel()
+        self.model_label.setWordWrap(True)
+        layout.addWidget(self.model_label)
 
         self.table = QTableWidget(0, len(self.HEADERS))
         self.table.setHorizontalHeaderLabels(self.HEADERS)
@@ -112,6 +120,7 @@ class GenerationWidget(QWidget):
             "<b>Atracción:</b> Aᵢ = α₀ + α<sub>E</sub>Eᵢ + α<sub>S</sub>Sᵢ<br>"
             "<b>Balanceo:</b> Aᵢ* = F·Aᵢ, &nbsp; F = ΣPᵢ / ΣAᵢ"
         )
+        equations.setObjectName("generation_equations")
         equations.setTextFormat(Qt.TextFormat.RichText)
         layout.addWidget(equations)
         return group
@@ -131,6 +140,8 @@ class GenerationWidget(QWidget):
             row, column = divmod(index, 3)
             spin = self._create_coefficient_input(value)
             self._coefficient_inputs[name] = spin
+            target = name.split("_")[0]
+            spin.valueChanged.connect(lambda _v, key=target: self.calibration.manual_edit(key))
             layout.addWidget(QLabel(label), row * 2, column)
             layout.addWidget(spin, row * 2 + 1, column)
         return group
@@ -139,11 +150,13 @@ class GenerationWidget(QWidget):
     def _create_coefficient_input(value: float) -> QDoubleSpinBox:
         spin = QDoubleSpinBox()
         spin.setRange(-1_000_000, 1_000_000)
-        spin.setDecimals(4)
+        spin.setDecimals(8)
         spin.setValue(value)
         return spin
 
     def _load_example(self) -> None:
+        self.production_model = self.attraction_model = "ols"
+        self.calibration.manual_edit()
         defaults = GenerationCoefficients()
         for name, spin in self._coefficient_inputs.items():
             spin.setValue(getattr(defaults, name))
@@ -162,7 +175,12 @@ class GenerationWidget(QWidget):
             coefficients = GenerationCoefficients(
                 **{name: spin.value() for name, spin in self._coefficient_inputs.items()}
             )
-            result = calculate_generation(zones, coefficients)
+            result = calculate_generation(
+                zones,
+                coefficients,
+                production_model=self.production_model,
+                attraction_model=self.attraction_model,
+            )
         except (GenerationError, ValueError) as error:
             if raise_errors:
                 raise
@@ -181,7 +199,37 @@ class GenerationWidget(QWidget):
             f"ΣA* = {result.total_attractions_balanced:,.2f} viajes."
         )
         self.current_result = result
+        p = "β₀ + β<sub>H</sub>Hᵢ + β<sub>V</sub>Vᵢ"
+        a = "α₀ + α<sub>E</sub>Eᵢ + α<sub>S</sub>Sᵢ"
+        if self.production_model != "ols":
+            p = f"exp({p})"
+        if self.attraction_model != "ols":
+            a = f"exp({a})"
+        self.findChild(QLabel, "generation_equations").setText(
+            f"<b>Producción:</b> Pᵢ = {p}<br><b>Atracción:</b> Aᵢ = {a}<br>"
+            "<b>Balanceo:</b> Aᵢ* = F·Aᵢ, &nbsp; F = ΣPᵢ / ΣAᵢ"
+        )
+        self.model_label.setText(
+            f"Producción: {self.production_model}; atracción: {self.attraction_model}. "
+            "OLS: respuesta = intercepto + coeficientes × variables. "
+            "Poisson / NB2: respuesta esperada = exp(intercepto + coeficientes × variables). "
+            "Los valores siguen siendo editables."
+        )
         self.result_calculated.emit(result)
+
+    def _apply_estimate(self, target: str, result: dict) -> None:
+        fields = (
+            ("production_intercept", "production_households", "production_vehicles")
+            if target == "production"
+            else ("attraction_intercept", "attraction_jobs", "attraction_students")
+        )
+        values = [result["parameters"][k] for k in ("intercept", "x1", "x2")]
+        if any(not -1e6 <= v <= 1e6 for v in values):
+            raise ValueError("Un coeficiente excede el rango permitido por la etapa.")
+        for field, value in zip(fields, values, strict=True):
+            self._coefficient_inputs[field].setValue(value)
+        setattr(self, target + "_model", result["model"])
+        self.model_label.setText(f"Modelo aplicado en {target}: {result['model']}. Pulse Calcular.")
 
     def _read_zone(self, row: int) -> ZoneInput:
         name_item = self.table.item(row, 0)

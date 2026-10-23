@@ -6,6 +6,8 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
     QDoubleSpinBox,
     QFileDialog,
     QGridLayout,
@@ -30,6 +32,7 @@ from macronet.domain.distribution import (
     distribute_trips,
 )
 from macronet.exporters import save_od_csv
+from macronet.ui.calibration_widget import CalibrationPanel
 
 EXAMPLE_NAMES = ("Centro", "Norte", "Sur", "Oriente")
 EXAMPLE_PRODUCTIONS = (260.0, 320.0, 290.0, 330.0)
@@ -71,6 +74,15 @@ class DistributionWidget(QWidget):
         layout.addWidget(explanation)
         layout.addWidget(self._build_equations_group())
         layout.addWidget(self._build_controls_group())
+        self.calibration = CalibrationPanel(
+            "distribution", self._calibration_context, self._apply_estimate
+        )
+        layout.addWidget(self.calibration)
+        for spin in (self.alpha_input, self.beta_input):
+            spin.valueChanged.connect(lambda _v: self.calibration.manual_edit("distribution"))
+        self.friction_selector.currentIndexChanged.connect(
+            lambda _v: self.calibration.manual_edit("distribution")
+        )
 
         self.marginals_table = QTableWidget(0, 3)
         self.marginals_table.setHorizontalHeaderLabels(
@@ -127,6 +139,7 @@ class DistributionWidget(QWidget):
             "<b>Modelo:</b> Tᵢⱼ = aᵢOᵢ bⱼDⱼ f(cᵢⱼ)<br>"
             "<b>Restricciones:</b> ΣⱼTᵢⱼ = Oᵢ &nbsp; y &nbsp; ΣᵢTᵢⱼ = Dⱼ"
         )
+        equations.setObjectName("distribution_equations")
         equations.setTextFormat(Qt.TextFormat.RichText)
         layout.addWidget(equations)
         return group
@@ -140,6 +153,19 @@ class DistributionWidget(QWidget):
         self.beta_input.setDecimals(4)
         self.beta_input.setSingleStep(0.01)
         self.beta_input.setValue(0.1)
+        self.beta_input.setDecimals(8)
+        self.alpha_input = QDoubleSpinBox()
+        self.alpha_input.setRange(0, 100)
+        self.alpha_input.setDecimals(8)
+        self.alpha_input.setValue(1)
+        self.advanced_functions = QCheckBox("Habilitar potencia y combinada")
+        self.friction_selector = QComboBox()
+        self.friction_selector.addItem("Exponencial · exp(−βc)", "exponential")
+        self.friction_selector.addItem("Potencia · c^(−α)", "power")
+        self.friction_selector.addItem("Combinada · c^α exp(−βc)", "combined")
+        self.advanced_functions.toggled.connect(self._enable_functions)
+        self.friction_selector.currentIndexChanged.connect(self._friction_changed)
+        self._enable_functions(False)
 
         self.tolerance_input = QDoubleSpinBox()
         self.tolerance_input.setRange(0.000001, 1.0)
@@ -153,14 +179,60 @@ class DistributionWidget(QWidget):
         restore_button = QPushButton("Restaurar impedancias")
         restore_button.clicked.connect(self._restore_costs)
 
-        layout.addWidget(QLabel("β"), 0, 0)
+        layout.addWidget(QLabel("β distribución (1/unidad de impedancia)"), 0, 0)
         layout.addWidget(self.beta_input, 1, 0)
         layout.addWidget(QLabel("Tolerancia"), 0, 1)
         layout.addWidget(self.tolerance_input, 1, 1)
         layout.addWidget(QLabel("Máximo de iteraciones"), 0, 2)
         layout.addWidget(self.iterations_input, 1, 2)
         layout.addWidget(restore_button, 1, 3)
+        layout.addWidget(self.advanced_functions, 2, 0, 1, 2)
+        layout.addWidget(self.friction_selector, 2, 2, 1, 2)
+        layout.addWidget(QLabel("α distribución (adimensional)"), 3, 0)
+        layout.addWidget(self.alpha_input, 3, 1)
+        self.alpha_input.setEnabled(False)
         return group
+
+    def _enable_functions(self, enabled):
+        for index in (1, 2):
+            self.friction_selector.model().item(index).setEnabled(enabled)
+        if not enabled:
+            self.friction_selector.setCurrentIndex(0)
+
+    def _friction_changed(self):
+        function = self.friction_selector.currentData()
+        self.alpha_input.setEnabled(function != "exponential")
+        self.beta_input.setEnabled(function != "power")
+        equations = self.findChild(QLabel, "distribution_equations")
+        equations.setText(
+            "<b>Fricción:</b> f(cᵢⱼ) = "
+            + {
+                "exponential": "exp(−βcᵢⱼ)",
+                "power": "cᵢⱼ<sup>−α</sup>",
+                "combined": "cᵢⱼ<sup>α</sup> exp(−βcᵢⱼ)",
+            }[function]
+            + "<br><b>Modelo:</b> Tᵢⱼ = aᵢOᵢ bⱼDⱼ f(cᵢⱼ)<br>"
+            "<b>Restricciones:</b> ΣⱼTᵢⱼ = Oᵢ &nbsp; y &nbsp; ΣᵢTᵢⱼ = Dⱼ"
+        )
+
+    def _calibration_context(self):
+        names, productions, attractions = self._read_marginals()
+        return dict(
+            names=names,
+            productions=productions,
+            attractions=attractions,
+            costs=self._read_costs(),
+            friction_function=self.friction_selector.currentData(),
+        )
+
+    def _apply_estimate(self, _target, result):
+        parameters = result["parameters"]
+        if result["model"] != self.friction_selector.currentData():
+            raise ValueError("Seleccione la misma función usada en la calibración.")
+        for key, value in parameters.items():
+            if not 0 <= value <= 100:
+                raise ValueError("Parámetro de fricción fuera de rango.")
+            getattr(self, key + "_input").setValue(value)
 
     def set_from_generation(self, generation_result: object) -> None:
         """Recibe automáticamente los marginales calculados en la etapa 1."""
@@ -188,6 +260,8 @@ class DistributionWidget(QWidget):
                 self.beta_input.value(),
                 tolerance=self.tolerance_input.value(),
                 max_iterations=self.iterations_input.value(),
+                friction_function=self.friction_selector.currentData(),
+                alpha=self.alpha_input.value(),
             )
         except (DistributionError, ValueError, AttributeError) as error:
             if raise_errors:
@@ -260,8 +334,10 @@ class DistributionWidget(QWidget):
     @staticmethod
     def _default_costs(size: int) -> tuple[tuple[float, ...], ...]:
         return tuple(
-            tuple(3.0 if origin == destination else 8.0 + 3.0 * abs(origin - destination)
-                  for destination in range(size))
+            tuple(
+                3.0 if origin == destination else 8.0 + 3.0 * abs(origin - destination)
+                for destination in range(size)
+            )
             for origin in range(size)
         )
 

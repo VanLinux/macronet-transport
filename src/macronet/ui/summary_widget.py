@@ -39,6 +39,8 @@ class SummaryWidget(QWidget):
         self.mode_choice_result: ModeChoiceResult | None = None
         self.assignment_result: AssignmentResult | None = None
         self.assigned_mode = "Automóvil"
+        self.comparison_result = None
+        self.metadata_provider = lambda: {}
         self.analyst_name = ""
         self._build_ui()
 
@@ -126,9 +128,12 @@ class SummaryWidget(QWidget):
         )
         self._update_export_state()
 
-    def set_from_assignment(self, result: AssignmentResult, mode_name: str) -> None:
+    def set_from_assignment(
+        self, result: AssignmentResult, mode_name: str, comparison=None
+    ) -> None:
         self.assignment_result = result
         self.assigned_mode = mode_name
+        self.comparison_result = comparison
         critical = max(result.link_results, key=lambda item: item.volume_capacity_ratio)
         overloaded = sum(item.volume_capacity_ratio > 1.0 for item in result.link_results)
         self.assignment_label.setText(
@@ -138,7 +143,14 @@ class SummaryWidget(QWidget):
             f"<b>Arco crítico:</b> {escape(critical.link.link_id)} "
             f"({escape(critical.link.tail)} → {escape(critical.link.head)}) &nbsp; · &nbsp; "
             f"<b>Máximo v/c:</b> {critical.volume_capacity_ratio:.3f} &nbsp; · &nbsp; "
-            f"<b>Arcos con v/c &gt; 1:</b> {overloaded}"
+            f"<b>Arcos con v/c &gt; 1:</b> {overloaded}<br>"
+            + (
+                f"<b>Wardrop UE:</b> {'convergió' if result.converged else 'no convergió'}; "
+                f"brecha {result.relative_gap:.4%}; {len(result.history) - 1} actualizaciones. "
+                f"Tiempo total {result.total_travel_time:.2f} veh·min."
+                if result.method == "ue"
+                else "<b>Todo-o-Nada:</b> ejecución directa con tiempos libres."
+            )
         )
         self._update_export_state()
 
@@ -217,6 +229,8 @@ class SummaryWidget(QWidget):
                 self.assignment_result,
                 self.assigned_mode,
                 self.analyst_name,
+                comparison=self.comparison_result,
+                calibration=self.metadata_provider(),
             )
         except OSError as error:
             QMessageBox.critical(self, "No se pudo guardar", str(error))

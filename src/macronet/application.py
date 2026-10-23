@@ -6,9 +6,11 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
+from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
+    QComboBox,
     QDoubleSpinBox,
     QFileDialog,
     QLabel,
@@ -24,6 +26,7 @@ from PySide6.QtWidgets import (
 from macronet import __version__
 from macronet.domain.four_step import FOUR_STEP_SEQUENCE
 from macronet.project import ProjectError, load_project, save_project
+from macronet.ui.appearance import Appearance, make_scrollable
 from macronet.ui.assignment_widget import AssignmentWidget
 from macronet.ui.distribution_widget import DistributionWidget
 from macronet.ui.generation_widget import GenerationWidget
@@ -49,8 +52,8 @@ OVERVIEW_STAGES = (
     ),
     (
         "Asignación de viajes",
-        "Carga la demanda modal en la red con asignación Todo-o-Nada y rutas mínimas "
-        "calculadas con el algoritmo de Dijkstra.",
+        "Carga la demanda modal con Todo-o-Nada o equilibrio de Wardrop, "
+        "con comparación de flujos y diagnóstico de convergencia.",
     ),
 )
 
@@ -60,8 +63,9 @@ class MainWindow(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
+        self.appearance = Appearance(self)
         self.setWindowTitle(f"MacroNet Transport {__version__}")
-        self.resize(1100, 760)
+        self.resize(1280, 900)
         self.project_path: Path | None = None
         self._dirty = False
         self._install_tabs(ExerciseTabs())
@@ -75,6 +79,15 @@ class MainWindow(QMainWindow):
             action.setShortcut(shortcut)
             action.triggered.connect(callback)
             file_menu.addAction(action)
+        view_menu = self.menuBar().addMenu("Apariencia")
+        themes = QActionGroup(self)
+        themes.setExclusive(True)
+        for title, mode in (("Seguir al sistema", "auto"), ("Claro", "light"), ("Oscuro", "dark")):
+            action = QAction(title, themes)
+            action.setCheckable(True)
+            action.setChecked(mode == "auto")
+            action.triggered.connect(lambda _checked, value=mode: self.appearance.set_mode(value))
+            view_menu.addAction(action)
         self._update_title()
 
     def _install_tabs(self, tabs) -> None:
@@ -83,7 +96,13 @@ class MainWindow(QMainWindow):
             table.itemChanged.connect(self._mark_dirty)
         for spin in (*tabs.findChildren(QDoubleSpinBox), *tabs.findChildren(QSpinBox)):
             spin.valueChanged.connect(self._mark_dirty)
-        tabs.widget(4).mode_selector.currentIndexChanged.connect(self._mark_dirty)
+        for selector in tabs.findChildren(QComboBox):
+            selector.currentIndexChanged.connect(self._mark_dirty)
+        for checkbox in tabs.findChildren(QCheckBox):
+            checkbox.toggled.connect(self._mark_dirty)
+        for widget in tabs.stages.values():
+            if hasattr(widget, "calibration"):
+                widget.calibration.changed.connect(self._mark_dirty)
         tabs.widget(5).analyst_changed.connect(self._mark_dirty)
 
     def _mark_dirty(self, *_args) -> None:
@@ -251,6 +270,12 @@ class ExerciseTabs(QTabWidget):
         }
         for widget in self.stages.values():
             widget.result_calculated.connect(self._capture_calculated_state)
+        summary_widget.metadata_provider = self._report_metadata
+        for widget in (*self.stages.values(), summary_widget):
+            make_scrollable(widget)
+
+    def _report_metadata(self):
+        return self.calculated_states
 
     def _capture_calculated_state(self, _result: object) -> None:
         sender = self.sender()
@@ -260,7 +285,10 @@ class ExerciseTabs(QTabWidget):
                 break
 
     def _update_assignment_summary(self, result: object) -> None:
-        self.widget(5).set_from_assignment(result, self.widget(4).assigned_mode_name)
+        assignment = self.widget(4)
+        self.widget(5).set_from_assignment(
+            result, assignment.assigned_mode_name, assignment.comparison
+        )
 
     @staticmethod
     def _build_overview() -> QWidget:
