@@ -11,7 +11,7 @@ from pathlib import Path
 from macronet import __version__
 from macronet.domain.generation import GenerationCoefficients
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 STAGES = ("generation", "distribution", "modal", "assignment")
 MAX_PROJECT_BYTES = 10 * 1024 * 1024
 
@@ -25,9 +25,10 @@ def validate_project(document: object) -> None:
 
     if not isinstance(document, dict) or document.get("format") != "MacroNet Transport":
         raise ProjectError("El archivo no es un ejercicio de MacroNet Transport.")
-    if type(document.get("format_version")) is not int or document["format_version"] != 1:
+    if type(document.get("format_version")) is not int or document["format_version"] not in (1, 2):
         raise ProjectError("Versión de archivo .mnet incompatible. Actualice MacroNet.")
     try:
+        _safe_tree(document)
         _text(document["analyst_name"])
         for section in ("draft", "calculated"):
             states = document[section]
@@ -58,6 +59,8 @@ def validate_project(document: object) -> None:
 
 
 def _validate_state(stage: str, state: dict) -> None:
+    if "calibration" in state:
+        _calibration(state["calibration"])
     if stage == "generation":
         _table(state["table"], 5)
         names = GenerationCoefficients.__dataclass_fields__
@@ -65,12 +68,27 @@ def _validate_state(stage: str, state: dict) -> None:
             raise ValueError("Coeficientes de generación incompletos.")
         for value in state["coefficients"].values():
             _number(value, -1_000_000, 1_000_000)
+        for key in ("production_model", "attraction_model"):
+            if state.get(key, "ols") not in ("ols", "poisson", "negative_binomial"):
+                raise ValueError("Modelo de generación inválido.")
     elif stage == "distribution":
         size = _table(state["marginals"], 3)
         _table(state["costs"], size, rows=size)
         _number(state["beta"], 0, 100)
         _number(state["tolerance"], 0.000001, 1)
         _number(state["iterations"], 1, 10_000, integer=True)
+        _number(state.get("alpha", 1), 0, 100)
+        if state.get("friction_function", "exponential") not in (
+            "exponential",
+            "power",
+            "combined",
+        ):
+            raise ValueError("Función de fricción inválida.")
+        _boolean(state.get("advanced_functions", False))
+        if state.get("friction_function", "exponential") != "exponential" and not state.get(
+            "advanced_functions"
+        ):
+            raise ValueError("La función avanzada de distribución no está habilitada.")
     else:
         names = state["zone_names"]
         if not isinstance(names, list) or not 1 <= len(names) <= 100:
@@ -89,6 +107,99 @@ def _validate_state(stage: str, state: dict) -> None:
             _matrix(state["demand_matrix"], len(names))
             _text(state["mode_name"])
             _number(state["mode_index"], 0, 2, integer=True)
+            if state.get("method", "aon") not in ("aon", "ue"):
+                raise ValueError("Método de asignación inválido.")
+            for key, default, lower, upper in (
+                ("alpha", 0.15, 0, 100),
+                ("beta", 4, 1, 20),
+                ("tolerance", 0.01, 1e-8, 1),
+            ):
+                _number(state.get(key, default), lower, upper)
+            _number(state.get("iterations", 100), 1, 10000, integer=True)
+            _boolean(state.get("comparison", False))
+
+
+def _boolean(value):
+    if type(value) is not bool:
+        raise ValueError("Se esperaba un booleano.")
+
+
+def _safe_tree(value, depth=0):
+    if depth > 30:
+        raise ValueError("Estructura de archivo demasiado profunda.")
+    if value is None or type(value) is bool:
+        return
+    if isinstance(value, dict):
+        for key, child in value.items():
+            _text(key)
+            _safe_tree(child, depth + 1)
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            _safe_tree(child, depth + 1)
+    elif isinstance(value, str):
+        _text(value)
+    else:
+        _number(value, -1e300, 1e300)
+
+
+def _calibration(state):
+    if not isinstance(state, dict) or state.get("mode") not in ("manual", "estimated"):
+        raise ValueError("Estado de calibración inválido.")
+    for key in ("records", "applied"):
+        if not isinstance(state.get(key), dict):
+            raise ValueError("Calibración incompleta.")
+    for record in state["records"].values():
+        if not isinstance(record, dict):
+            raise ValueError("Registro de calibración inválido.")
+        headers, rows = record["headers"], record["rows"]
+        if not isinstance(headers, list) or not 1 <= len(headers) <= 50:
+            raise ValueError("Columnas de calibración inválidas.")
+        for header in headers:
+            _text(header)
+        _table(rows, len(headers), max_rows=30000)
+        if not isinstance(record["mapping"], dict):
+            raise ValueError("Mapeo de columnas inválido.")
+        for value in record["mapping"].values():
+            _text(value)
+        _text(record["filename"])
+        if record.get("result") is not None:
+            _calibration_result(record["result"])
+    for result in state["applied"].values():
+        _calibration_result(result)
+
+
+def _calibration_result(result):
+    if result["model"] not in (
+        "ols",
+        "poisson",
+        "negative_binomial",
+        "mnl",
+        "exponential",
+        "power",
+        "combined",
+    ):
+        raise ValueError("Modelo estadístico inválido.")
+    for key in ("parameters", "standard_errors", "metrics"):
+        if not isinstance(result[key], dict):
+            raise ValueError("Resultados estadísticos incompletos.")
+        for name, value in result[key].items():
+            _text(name)
+            _number(value, -1e300, 1e300)
+    if not isinstance(result["confidence_intervals"], dict):
+        raise ValueError("Intervalos inválidos.")
+    for interval in result["confidence_intervals"].values():
+        if len(interval) != 2:
+            raise ValueError("Intervalo incompatible.")
+        for value in interval:
+            _number(value, -1e300, 1e300)
+    for key in ("observed", "predicted"):
+        if not isinstance(result[key], (list, tuple)) or len(result[key]) > 30000:
+            raise ValueError("Diagnóstico demasiado grande.")
+        for value in result[key]:
+            _number(value, -1e300, 1e300)
+    for note in result["warnings"]:
+        _text(note)
+    _boolean(result["converged"])
 
 
 def _text(value: object) -> None:
@@ -138,6 +249,31 @@ def load_project(path: str | Path) -> dict:
     except (UnicodeError, json.JSONDecodeError, RecursionError) as error:
         raise ProjectError("El archivo .mnet está dañado o no contiene JSON válido.") from error
     validate_project(document)
+    if document["format_version"] == 1:
+        for section in ("draft", "calculated"):
+            for stage, state in document[section].items():
+                if stage != "assignment":
+                    state.setdefault(
+                        "calibration", {"mode": "manual", "records": {}, "applied": {}}
+                    )
+                if stage == "generation":
+                    state.setdefault("production_model", "ols")
+                    state.setdefault("attraction_model", "ols")
+                elif stage == "distribution":
+                    state.setdefault("friction_function", "exponential")
+                    state.setdefault("advanced_functions", False)
+                    state.setdefault("alpha", 1.0)
+                elif stage == "assignment":
+                    for key, value in dict(
+                        method="aon",
+                        alpha=0.15,
+                        beta=4.0,
+                        tolerance=0.01,
+                        iterations=100,
+                        comparison=False,
+                    ).items():
+                        state.setdefault(key, value)
+        document["format_version"] = FORMAT_VERSION
     return document
 
 

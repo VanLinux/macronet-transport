@@ -6,20 +6,22 @@ from html import escape
 from math import cos, pi, sin
 from pathlib import Path
 
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from matplotlib.patches import FancyArrowPatch
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
+    QDoubleSpinBox,
     QFileDialog,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -32,8 +34,11 @@ from macronet.domain.assignment import (
     AssignmentResult,
     Link,
     assign_all_or_nothing,
+    assign_user_equilibrium,
+    evaluate_bpr,
 )
-from macronet.exporters import save_assignment_graphml
+from macronet.exporters import save_assignment_csv, save_assignment_graphml
+from macronet.ui.appearance import AdaptiveCanvas
 
 EXAMPLE_NAMES = ("Centro", "Norte", "Sur", "Oriente")
 EXAMPLE_AUTO_DEMAND = (
@@ -44,7 +49,7 @@ EXAMPLE_AUTO_DEMAND = (
 )
 
 
-class NetworkCanvas(FigureCanvasQTAgg):
+class NetworkCanvas(AdaptiveCanvas):
     """Representa la red y escala cada arco según su flujo."""
 
     def __init__(self, figsize: tuple[float, float] = (7, 5)) -> None:
@@ -85,25 +90,34 @@ class NetworkCanvas(FigureCanvasQTAgg):
                 shrinkB=18,
                 alpha=0.8,
             )
+            arrow.set_gid(f"flow:{item.volume_capacity_ratio}")
             axes.add_patch(arrow)
 
         for node, (x_coordinate, y_coordinate) in positions.items():
-            axes.scatter(x_coordinate, y_coordinate, s=850, color="#e8f0fe", edgecolor="#174ea6")
+            dark = self.palette().window().color().lightness() < 128
+            marker = axes.scatter(
+                x_coordinate,
+                y_coordinate,
+                s=850,
+                color="#363636" if dark else "#e8e8e8",
+                edgecolor="#bbbbbb" if dark else "#555555",
+            )
+            marker.set_gid("network_node")
             axes.text(x_coordinate, y_coordinate, node, ha="center", va="center", fontsize=9)
 
-        axes.set_title("Azul: v/c ≤ 0.8 · Naranja: 0.8 < v/c ≤ 1 · Rojo: v/c > 1")
+        axes.set_title("Grosor proporcional al flujo · intensidad según utilización v/c")
         axes.set_aspect("equal")
         axes.axis("off")
         self.figure.tight_layout()
         self.draw_idle()
 
-    @staticmethod
-    def _flow_color(ratio: float) -> str:
+    def _flow_color(self, ratio: float) -> str:
+        dark = self.palette().window().color().lightness() < 128
         if ratio > 1.0:
-            return "#c62828"
+            return "#dddddd" if dark else "#303030"
         if ratio > 0.8:
-            return "#ef6c00"
-        return "#1565c0"
+            return "#aaaaaa" if dark else "#666666"
+        return "#888888"
 
 
 class AssignmentWidget(QWidget):
@@ -120,6 +134,8 @@ class AssignmentWidget(QWidget):
         self._mode_name = "Automóvil"
         self._mode_choice_result = None
         self.current_result: AssignmentResult | None = None
+        self.comparison: tuple[AssignmentResult, AssignmentResult] | None = None
+        self.calculated_zone_nodes: tuple[str, ...] = ()
         self._build_ui()
         self._set_zone_nodes(EXAMPLE_NAMES)
         self._restore_network()
@@ -133,7 +149,7 @@ class AssignmentWidget(QWidget):
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
 
-        title = QLabel("Asignación Todo-o-Nada")
+        title = QLabel("Asignación de viajes")
         title.setStyleSheet("font-size: 24px; font-weight: 600;")
         layout.addWidget(title)
 
@@ -144,6 +160,44 @@ class AssignmentWidget(QWidget):
         self.explanation.setWordWrap(True)
         layout.addWidget(self.explanation)
         layout.addWidget(self._build_equations_group())
+        controls = QGroupBox(
+            "Método de asignación · tiempos en min, demanda y capacidad por periodo"
+        )
+        grid = QGridLayout(controls)
+        self.method_selector = QComboBox()
+        self.method_selector.addItem("Todo-o-Nada · rutas mínimas", "aon")
+        self.method_selector.addItem("Wardrop · equilibrio de usuario (Frank–Wolfe)", "ue")
+        self.alpha_input = QDoubleSpinBox()
+        self.alpha_input.setRange(0, 100)
+        self.alpha_input.setDecimals(6)
+        self.alpha_input.setValue(0.15)
+        self.beta_input = QDoubleSpinBox()
+        self.beta_input.setRange(1, 20)
+        self.beta_input.setValue(4)
+        self.tolerance_input = QDoubleSpinBox()
+        self.tolerance_input.setRange(0.00000001, 1)
+        self.tolerance_input.setDecimals(8)
+        self.tolerance_input.setValue(0.01)
+        self.iterations_input = QSpinBox()
+        self.iterations_input.setRange(1, 10000)
+        self.iterations_input.setValue(100)
+        grid.addWidget(self.method_selector, 0, 0, 1, 4)
+        for col, (label, spin) in enumerate(
+            (
+                ("α BPR (ejemplo editable)", self.alpha_input),
+                ("β BPR (ejemplo editable)", self.beta_input),
+                ("Brecha relativa UE · 0.01 = 1%", self.tolerance_input),
+                ("Actualizaciones máximas UE", self.iterations_input),
+            )
+        ):
+            grid.addWidget(QLabel(label), 1, col)
+            grid.addWidget(spin, 2, col)
+        self.requirements = QLabel()
+        self.requirements.setWordWrap(True)
+        grid.addWidget(self.requirements, 3, 0, 1, 4)
+        layout.addWidget(controls)
+        self.method_selector.currentIndexChanged.connect(self._method_changed)
+        self._method_changed()
 
         layout.addWidget(QLabel("Modo que se asignará a esta red:"))
         self.mode_selector = QComboBox()
@@ -166,19 +220,23 @@ class AssignmentWidget(QWidget):
         restore_button = QPushButton("Restaurar red didáctica")
         restore_button.clicked.connect(self._restore_network)
         assign_button = QPushButton("Asignar Todo-o-Nada")
+        self.assign_button = assign_button
         assign_button.setDefault(True)
         assign_button.clicked.connect(self.calculate)
         layout.addWidget(restore_button)
         layout.addWidget(assign_button)
+        compare_button = QPushButton("Comparar Todo-o-Nada y Wardrop")
+        compare_button.clicked.connect(self.compare_methods)
+        layout.addWidget(compare_button)
 
         results = QTabWidget()
         self.paths_table = QTableWidget(0, 6)
         self.paths_table.setHorizontalHeaderLabels(
             ("Origen", "Destino", "Demanda", "Ruta de nodos", "Arcos", "Costo")
         )
-        self.flows_table = QTableWidget(0, 7)
+        self.flows_table = QTableWidget(0, 8)
         self.flows_table.setHorizontalHeaderLabels(
-            ("Arco", "Desde", "Hasta", "Tiempo", "Capacidad", "Flujo", "v/c")
+            ("Arco", "Desde", "Hasta", "t⁰ (min)", "Capacidad", "Flujo", "v/c", "t (min)")
         )
         network_panel = QWidget()
         network_layout = QVBoxLayout(network_panel)
@@ -200,12 +258,67 @@ class AssignmentWidget(QWidget):
         results.addTab(self.paths_table, "Rutas mínimas")
         results.addTab(self.flows_table, "Flujos por arco")
         results.addTab(network_panel, "Red y flujos")
+        self.comparison_table = QTableWidget(0, 9)
+        self.comparison_table.setHorizontalHeaderLabels(
+            (
+                "Arco",
+                "Flujo AON",
+                "Flujo UE",
+                "Δ flujo",
+                "Δ %",
+                "t AON BPR",
+                "t UE BPR",
+                "v/c AON",
+                "v/c UE",
+            )
+        )
+        self._stretch_headers(self.comparison_table)
+        results.addTab(self.comparison_table, "Comparación")
+        self.history_canvas = AdaptiveCanvas(Figure(figsize=(6, 3)))
+        results.addTab(self.history_canvas, "Convergencia UE")
+        self.results_tabs = results
         layout.addWidget(results, stretch=1)
+        self.export_csv_button = QPushButton("Descargar flujos y comparación (.csv)")
+        self.export_csv_button.clicked.connect(self._export_csv)
+        layout.addWidget(self.export_csv_button)
 
         self.summary = QLabel()
+        self.summary.setWordWrap(True)
         self.summary.setTextFormat(Qt.TextFormat.RichText)
         self.summary.setStyleSheet("font-size: 16px; padding: 10px;")
         layout.addWidget(self.summary)
+        for table in (self.zone_nodes_table, self.links_table):
+            table.itemChanged.connect(self._invalidate_comparison)
+        for spin in (
+            self.alpha_input,
+            self.beta_input,
+            self.tolerance_input,
+            self.iterations_input,
+        ):
+            spin.valueChanged.connect(self._invalidate_comparison)
+
+    def _method_changed(self) -> None:
+        ue = self.method_selector.currentData() == "ue"
+        if hasattr(self, "assign_button"):
+            self.assign_button.setText("Asignar Wardrop UE" if ue else "Asignar Todo-o-Nada")
+        self.tolerance_input.setEnabled(ue)
+        self.iterations_input.setEnabled(ue)
+        self.requirements.setText(
+            "Wardrop: matriz OD del modo, centroides, red dirigida, t⁰ > 0 y capacidad > 0. "
+            "BPR: t = t⁰[1 + α(v/C)^β]. Flujo y capacidad deben usar el mismo periodo. "
+            "La tolerancia UE es distinta de la tolerancia de balanceo OD. "
+            "La OD vial debe estar en vehículos; si contiene personas, conviértala antes."
+            if ue
+            else "Todo-o-Nada: matriz OD del modo, centroides, red dirigida y tiempos libres > 0. "
+            "Capacidad solo diagnostica v/c. α y β BPR se usan únicamente al comparar tiempos. "
+            "Empates: primera ruta según orden de nodos e identificadores de arco."
+        )
+
+    def _invalidate_comparison(self, *_args) -> None:
+        if getattr(self, "_restoring", False):
+            return
+        self.comparison = None
+        self.comparison_table.setRowCount(0)
 
     @staticmethod
     def _build_equations_group() -> QGroupBox:
@@ -265,11 +378,15 @@ class AssignmentWidget(QWidget):
         try:
             zone_nodes = self._read_zone_nodes()
             links = self._read_links()
-            result = assign_all_or_nothing(
+            method = self.method_selector.currentData()
+            solver = assign_user_equilibrium if method == "ue" else assign_all_or_nothing
+            options = self._ue_options() if method == "ue" else {}
+            result = solver(
                 self._zone_names,
                 zone_nodes,
                 self._demand_matrix,
                 links,
+                **options,
             )
         except (AssignmentError, ValueError, AttributeError) as error:
             if raise_errors:
@@ -277,8 +394,26 @@ class AssignmentWidget(QWidget):
             QMessageBox.warning(self, "Datos no válidos", str(error))
             return
 
+        self._invalidate_comparison()
+        self.calculated_zone_nodes = zone_nodes
+        self._display_result(result)
+
+    def _ue_options(self) -> dict:
+        return dict(
+            alpha=self.alpha_input.value(),
+            beta=self.beta_input.value(),
+            tolerance=self.tolerance_input.value(),
+            max_iterations=self.iterations_input.value(),
+        )
+
+    def _display_result(self, result: AssignmentResult) -> None:
+        ue = result.method == "ue"
         self.explanation.setText(
-            f"Se asigna la matriz modal de {escape(self._mode_name)} mediante Todo-o-Nada y rutas "
+            "Wardrop UE por Frank–Wolfe con BPR. Las rutas mostradas son caminos mínimos "
+            "de referencia con tiempos finales; su demanda OD no representa un reparto por ruta."
+            if ue
+            else f"Se asigna la matriz modal de {escape(self._mode_name)} "
+            "mediante Todo-o-Nada y rutas "
             "mínimas de Dijkstra. La capacidad no modifica las rutas; se utiliza únicamente "
             "para calcular v/c."
         )
@@ -286,6 +421,17 @@ class AssignmentWidget(QWidget):
         self._fill_flows(result)
         self.network_canvas.update_network(result)
         self.current_result = result
+        self.paths_table.setHorizontalHeaderLabels(
+            (
+                "Origen",
+                "Destino",
+                "Demanda OD" if ue else "Demanda",
+                "Ruta mínima final" if ue else "Ruta de nodos",
+                "Arcos",
+                "Tiempo mínimo (min)",
+            )
+        )
+        self._draw_history(result)
         self.enlarge_graph_button.setEnabled(True)
         self.export_graph_button.setEnabled(True)
         maximum_ratio = max(item.volume_capacity_ratio for item in result.link_results)
@@ -293,9 +439,93 @@ class AssignmentWidget(QWidget):
             f"<b>Comprobación:</b> demanda total = {result.total_demand:.2f}; "
             f"interzonal asignada = {result.assigned_demand:.2f}; "
             f"intrazonal = {result.intrazonal_demand:.2f}; "
-            f"máximo v/c = {maximum_ratio:.3f}."
+            f"máximo v/c = {maximum_ratio:.3f}.<br>"
+            + (
+                f"<b>UE {'convergió' if result.converged else 'no convergió'}:</b> "
+                f"brecha = {result.relative_gap:.4%}; actualizaciones = {len(result.history) - 1}; "
+                f"tiempo total = {result.total_travel_time:.2f} veh·min; "
+                f"tiempo medio interzonal = {result.mean_travel_time:.2f} min."
+                if ue
+                else "<b>AON:</b> ejecución directa con tiempos libres; no evalúa equilibrio."
+            )
         )
         self.result_calculated.emit(result)
+
+    def _draw_history(self, result: AssignmentResult) -> None:
+        self.history_canvas.figure.clear()
+        axes = self.history_canvas.figure.subplots()
+        if result.history:
+            axes.plot(
+                [h.number for h in result.history],
+                [h.relative_gap for h in result.history],
+                color="0.4",
+            )
+            axes.axhline(result.tolerance, color="0.5", linestyle="--", label="Tolerancia")
+            axes.legend()
+        axes.set_xlabel("Actualización Frank–Wolfe (0 = flujo inicial)")
+        axes.set_ylabel("Brecha relativa")
+        self.history_canvas.figure.tight_layout()
+        self.history_canvas.draw_idle()
+
+    def compare_methods(self, *, raise_errors: bool = False) -> None:
+        try:
+            nodes, links = self._read_zone_nodes(), self._read_links()
+            args = (self._zone_names, nodes, self._demand_matrix, links)
+            options = self._ue_options()
+            aon = evaluate_bpr(assign_all_or_nothing(*args), options["alpha"], options["beta"])
+            ue = assign_user_equilibrium(*args, **options)
+        except (ValueError, AttributeError) as error:
+            if raise_errors:
+                raise
+            QMessageBox.warning(self, "No se pudo comparar", str(error))
+            return
+        self.calculated_zone_nodes = nodes
+        self.comparison = (aon, ue)
+        selected = (
+            ue if self.method_selector.currentData() == "ue" else assign_all_or_nothing(*args)
+        )
+        self._display_result(selected)
+        self._draw_history(ue)
+        self.comparison_table.setRowCount(len(links))
+        for row, (a, u) in enumerate(zip(aon.link_results, ue.link_results, strict=True)):
+            delta = u.volume - a.volume
+            percent = f"{100 * delta / a.volume:.2f}%" if a.volume else "— (base cero)"
+            values = (
+                a.link.link_id,
+                f"{a.volume:.4f}",
+                f"{u.volume:.4f}",
+                f"{delta:.4f}",
+                percent,
+                f"{a.travel_time:.4f}",
+                f"{u.travel_time:.4f}",
+                f"{a.volume_capacity_ratio:.4f}",
+                f"{u.volume_capacity_ratio:.4f}",
+            )
+            for column, value in enumerate(values):
+                self._set_result_item(self.comparison_table, row, column, value)
+        self.summary.setText(
+            self.summary.text() + f"<br><b>Comparación BPR:</b> tiempo total AON "
+            f"{aon.total_travel_time:.2f} / UE {ue.total_travel_time:.2f} veh·min; "
+            f"media interzonal AON {aon.mean_travel_time:.2f} / UE "
+            f"{ue.mean_travel_time:.2f} min. "
+            f"UE {'convergió' if ue.converged else 'no convergió'}; "
+            f"brecha {ue.relative_gap:.4%}. Misma OD y red. UE no equivale al óptimo del sistema."
+        )
+        self.results_tabs.setCurrentWidget(self.comparison_table)
+
+    def _export_csv(self) -> None:
+        if self.current_result is None:
+            return
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "Guardar flujos", "flujos_asignacion.csv", "Archivo CSV (*.csv)"
+        )
+        if filename:
+            try:
+                save_assignment_csv(
+                    Path(filename).with_suffix(".csv"), self.current_result, self.comparison
+                )
+            except (OSError, ValueError) as error:
+                QMessageBox.critical(self, "No se pudo guardar", str(error))
 
     def _show_network_large(self) -> None:
         if self.current_result is None:
@@ -332,7 +562,7 @@ class AssignmentWidget(QWidget):
             save_assignment_graphml(
                 path,
                 self.current_result,
-                self._read_zone_nodes(),
+                self.calculated_zone_nodes,
                 self._mode_name,
             )
         except (OSError, ValueError) as error:
@@ -452,6 +682,7 @@ class AssignmentWidget(QWidget):
                 f"{item.link.capacity:.2f}",
                 f"{item.volume:.2f}",
                 f"{item.volume_capacity_ratio:.3f}",
+                f"{item.travel_time:.2f}",
             )
             for column, value in enumerate(values):
                 self._set_result_item(self.flows_table, row, column, value)

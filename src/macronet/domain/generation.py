@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import astuple, dataclass
-from math import isfinite
+from math import exp, isfinite
 
 
 class GenerationError(ValueError):
@@ -57,6 +57,9 @@ class GenerationResult:
 def calculate_generation(
     zones: list[ZoneInput] | tuple[ZoneInput, ...],
     coefficients: GenerationCoefficients,
+    *,
+    production_model: str = "ols",
+    attraction_model: str = "ols",
 ) -> GenerationResult:
     """Calcula producciones, atracciones y balancea estas últimas.
 
@@ -69,6 +72,11 @@ def calculate_generation(
 
     if not zones:
         raise GenerationError("Debe existir al menos una zona.")
+    if any(
+        m not in ("ols", "poisson", "negative_binomial")
+        for m in (production_model, attraction_model)
+    ):
+        raise GenerationError("Modelo de generación o atracción desconocido.")
 
     coefficients_values = astuple(coefficients)
     if not all(isfinite(value) for value in coefficients_values):
@@ -87,6 +95,13 @@ def calculate_generation(
             + coefficients.attraction_jobs * zone.jobs
             + coefficients.attraction_students * zone.students
         )
+        try:
+            production = exp(production) if production_model != "ols" else production
+            attraction = exp(attraction) if attraction_model != "ols" else attraction
+        except OverflowError as error:
+            raise GenerationError(f"La predicción excede el rango en {zone.name}.") from error
+        if not isfinite(production) or not isfinite(attraction):
+            raise GenerationError("La predicción debe ser finita.")
         if production < 0 or attraction < 0:
             raise GenerationError(
                 f"Los coeficientes producen un resultado negativo en la zona {zone.name}."

@@ -29,6 +29,7 @@ from macronet.domain.mode_choice import (
     choose_modes,
 )
 from macronet.exporters import save_modal_csv
+from macronet.ui.calibration_widget import CalibrationPanel
 
 EXAMPLE_NAMES = ("Centro", "Norte", "Sur", "Oriente")
 EXAMPLE_IMPEDANCES = (
@@ -92,11 +93,20 @@ class ModeChoiceWidget(QWidget):
         layout.addWidget(explanation)
         layout.addWidget(self._build_equations_group())
         layout.addWidget(self._build_coefficients_group())
+        self.calibration = CalibrationPanel(
+            "modal", self._calibration_context, self._apply_estimate
+        )
+        layout.addWidget(self.calibration)
 
         self.modes_table = QTableWidget(0, len(self.MODE_HEADERS))
         self.modes_table.setHorizontalHeaderLabels(self.MODE_HEADERS)
         self._stretch_headers(self.modes_table)
         self.modes_table.setMaximumHeight(170)
+        self.modes_table.itemChanged.connect(
+            lambda item: self.calibration.manual_edit("modal") if item.column() == 1 else None
+        )
+        for spin in (self.time_coefficient_input, self.cost_coefficient_input):
+            spin.valueChanged.connect(lambda _v: self.calibration.manual_edit("modal"))
         layout.addWidget(self.modes_table)
 
         selector_group = QGroupBox("Par origen-destino para inspección")
@@ -169,10 +179,25 @@ class ModeChoiceWidget(QWidget):
     def _coefficient_input(value: float) -> QDoubleSpinBox:
         spin = QDoubleSpinBox()
         spin.setRange(-100.0, 0.0)
-        spin.setDecimals(4)
+        spin.setDecimals(8)
         spin.setSingleStep(0.01)
         spin.setValue(value)
         return spin
+
+    def _calibration_context(self):
+        return {"mode_names": [self.modes_table.item(row, 0).text() for row in range(3)]}
+
+    def _apply_estimate(self, _target, result):
+        p = result["parameters"]
+        if any(not -100 <= p[key] <= 0 for key in ("beta_time", "beta_cost")):
+            raise ValueError(
+                "Los β estimados deben estar entre −100 y 0 para el modelo actual. "
+                "Revise especificación, signos y unidades; no se truncarán."
+            )
+        self.time_coefficient_input.setValue(p["beta_time"])
+        self.cost_coefficient_input.setValue(p["beta_cost"])
+        for index in range(3):
+            self.modes_table.item(index, 1).setText(str(p[f"ASC_m{index + 1}"]))
 
     def set_from_distribution(self, distribution_result: object) -> None:
         """Recibe la matriz OD y las impedancias calculadas en la etapa 2."""

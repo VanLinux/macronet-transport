@@ -6,7 +6,7 @@ El proyecto busca que el estudiante pueda observar el proceso completo, modifica
 
 ## Alcance actual
 
-La versión `3.0.0` incluye:
+La versión `3.1.0` (familia **3.x**) incluye:
 
 1. Generación y atracción de viajes.
 2. Distribución de viajes.
@@ -34,7 +34,11 @@ Cada módulo deberá separar el modelo matemático de la interfaz gráfica y con
 ## Estado
 
 El proyecto incluye un recorrido funcional por las cuatro etapas: generación y atracción,
-distribución gravitacional, elección modal logit y asignación Todo-o-Nada. La versión
+distribución gravitacional, elección modal logit y asignación Todo-o-Nada o Wardrop UE.
+Se conservan los parámetros manuales y se añade calibración por etapa con datos observados.
+La interfaz usa Latin Modern Roman y temas neutrales claro/oscuro; el menú **Apariencia**
+permite seguir al sistema o elegir un tema. Las fuentes incluidas conservan su licencia GUST/LPPL.
+La versión
 funcional anterior se conserva en la rama `release/v0.2.0`; también sigue disponible
 `release/v0.1.0`. La numeración pasa de 0.2.0 a 3.0.0 por decisión del proyecto.
 
@@ -55,6 +59,21 @@ funcional anterior se conserva en la rama `release/v0.2.0`; también sigue dispo
   bloque de matriz y marginales por modo, etiquetas y precisión numérica.
 - En **Asignación**, elija explícitamente el modo cuya demanda cargará en la red.
   La selección se conserva al renombrar modos; revise que la red represente ese modo.
+  **Todo-o-Nada** mantiene las rutas de flujo libre. **Wardrop UE** usa Frank–Wolfe
+  y BPR; solicita α, β, tolerancia de brecha relativa y máximo de actualizaciones.
+  La demanda vial y las capacidades deben corresponder al mismo periodo y estar
+  en vehículos. **Comparar métodos** ejecuta ambos sobre la misma OD y red, evalúa
+  los tiempos con la misma BPR y habilita el CSV comparativo. No confundir UE con
+  el óptimo del sistema.
+- En las tres primeras etapas, **Origen de parámetros → Estimados** habilita
+  **Importar, estimar y revisar**. Descargue la plantilla, importe observaciones,
+  mapee columnas y revise los diagnósticos. Los coeficientes solo se sustituyen al
+  pulsar **Aplicar parámetros estimados**; después pulse **Calcular** en la etapa.
+  Producción y atracción se estiman por separado mediante OLS inicialmente. Poisson
+  y binomial negativa NB2 requieren habilitación explícita y usan enlace logarítmico.
+  Distribución comienza con fricción exponencial; potencia y combinada se habilitan
+  con una casilla. La calibración modal estima MNL con las alternativas estables
+  `m1/m2/m3`, disponibilidad y un modo elegido por observación.
 - En **Resumen → Descargar informe (.tex)** se solicita el nombre del usuario
   en cada exportación. El nombre anterior se ofrece como valor inicial y se guarda
   en el ejercicio. El archivo se compila con `pdflatex resumen_macronet.tex` para
@@ -66,6 +85,7 @@ funcional anterior se conserva en la rama `release/v0.2.0`; también sigue dispo
 - Python 3.11 o posterior.
 - PySide6 para la aplicación de escritorio.
 - NumPy y pandas para cálculo y datos.
+- SciPy y statsmodels para estimación, optimización y diagnósticos.
 - NetworkX para redes y asignación.
 - Matplotlib para visualizaciones didácticas.
 - pytest para pruebas automatizadas.
@@ -98,6 +118,9 @@ El alcance funcional de la primera versión se encuentra en [`docs/scope-v0.1.md
 Las incorporaciones de la versión 3.0 se documentan en
 [`docs/scope-v3.0.md`](docs/scope-v3.0.md), y su historial en
 [`CHANGELOG.md`](CHANGELOG.md).
+
+La asignación y calibración de la versión 3.1, sus datos de entrada, supuestos y
+compatibilidad se describen en [`docs/scope-v3.1.md`](docs/scope-v3.1.md).
 
 Las incorporaciones de la versión 0.2 se documentan en [`docs/scope-v0.2.md`](docs/scope-v0.2.md).
 
