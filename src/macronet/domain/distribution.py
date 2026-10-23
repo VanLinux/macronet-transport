@@ -36,6 +36,9 @@ class DistributionResult:
     column_totals: tuple[float, ...]
     history: tuple[FurnessIteration, ...]
     converged: bool
+    friction_function: str = "exponential"
+    alpha: float = 0.0
+    beta: float = 0.0
 
     @property
     def iterations(self) -> int:
@@ -58,6 +61,8 @@ def distribute_trips(
     *,
     tolerance: float = DEFAULT_TOLERANCE,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
+    friction_function: str = "exponential",
+    alpha: float = 1.0,
 ) -> DistributionResult:
     """Distribuye viajes con fricción exponencial y balanceo de Furness.
 
@@ -80,9 +85,30 @@ def distribute_trips(
         max_iterations,
     )
 
-    friction_matrix = tuple(
-        tuple(exp(-beta * cost) for cost in row) for row in cost_matrix
-    )
+    if friction_function not in ("exponential", "power", "combined"):
+        raise DistributionError("Función de fricción desconocida.")
+    if not isfinite(alpha) or not 0 <= alpha <= 100:
+        raise DistributionError("α de distribución debe estar entre 0 y 100.")
+    if friction_function != "exponential" and any(c <= 0 for row in cost_matrix for c in row):
+        raise DistributionError(
+            "Potencia y combinada requieren impedancias estrictamente positivas."
+        )
+    try:
+        friction_matrix = tuple(
+            tuple(
+                exp(-beta * c)
+                if friction_function == "exponential"
+                else c ** (-alpha)
+                if friction_function == "power"
+                else c**alpha * exp(-beta * c)
+                for c in row
+            )
+            for row in cost_matrix
+        )
+    except OverflowError as error:
+        raise DistributionError("La fricción excede el rango numérico.") from error
+    if any(not isfinite(v) for row in friction_matrix for v in row):
+        raise DistributionError("La fricción produjo valores no finitos.")
     working_matrix = [list(row) for row in friction_matrix]
     history: list[FurnessIteration] = []
     converged = False
@@ -121,6 +147,9 @@ def distribute_trips(
         column_totals=final_columns,
         history=tuple(history),
         converged=converged,
+        friction_function=friction_function,
+        alpha=alpha,
+        beta=beta,
     )
 
 

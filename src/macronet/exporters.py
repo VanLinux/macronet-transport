@@ -72,6 +72,61 @@ def save_modal_csv(path: str | Path, result: ModeChoiceResult) -> None:
     Path(path).write_text(build_modal_csv(result), encoding="utf-8-sig", newline="")
 
 
+def build_assignment_csv(
+    result: AssignmentResult,
+    comparison: tuple[AssignmentResult, AssignmentResult] | None = None,
+) -> str:
+    output = StringIO(newline="")
+    writer = csv.writer(output, lineterminator="\n")
+    writer.writerow(
+        (
+            "Metodo",
+            "Arco",
+            "Desde",
+            "Hasta",
+            "t0_min",
+            "Capacidad_por_periodo",
+            "Flujo_por_periodo",
+            "v_c",
+            "Tiempo_min",
+            "Funcion_tiempo",
+            "Convergio_UE",
+            "Brecha_relativa",
+            "Actualizaciones_UE",
+            "Tiempo_total_veh_min",
+            "Media_interzonal_min",
+        )
+    )
+    for current in comparison or (result,):
+        for item in current.link_results:
+            writer.writerow(
+                (
+                    current.method,
+                    item.link.link_id,
+                    item.link.tail,
+                    item.link.head,
+                    item.link.free_flow_time,
+                    item.link.capacity,
+                    item.volume,
+                    item.volume_capacity_ratio,
+                    item.travel_time,
+                    current.cost_function,
+                    "" if current.converged is None else current.converged,
+                    "" if current.relative_gap is None else current.relative_gap,
+                    len(current.history) - 1 if current.history else "",
+                    current.total_travel_time,
+                    current.mean_travel_time,
+                )
+            )
+    return output.getvalue()
+
+
+def save_assignment_csv(path, result, comparison=None) -> None:
+    Path(path).write_text(
+        build_assignment_csv(result, comparison), encoding="utf-8-sig", newline=""
+    )
+
+
 def build_assignment_graph(
     result: AssignmentResult,
     zone_nodes: tuple[str, ...],
@@ -84,7 +139,8 @@ def build_assignment_graph(
         {
             "name": "Red asignada de MacroNet Transport",
             "mode": mode_name,
-            "assignment": "Todo-o-Nada",
+            "assignment": "Wardrop UE" if result.method == "ue" else "Todo-o-Nada",
+            "cost_function": result.cost_function,
         }
     )
     zones_by_node = dict(zip(zone_nodes, result.zone_names, strict=True))
@@ -115,6 +171,7 @@ def build_assignment_graph(
             id=item.link.link_id,
             label=item.link.link_id,
             free_flow_time=item.link.free_flow_time,
+            travel_time=item.travel_time,
             capacity=item.link.capacity,
             flow=item.volume,
             volume_capacity_ratio=ratio,
@@ -142,6 +199,9 @@ def build_summary_tex(
     assignment: AssignmentResult,
     assigned_mode: str,
     analyst_name: str,
+    *,
+    comparison: tuple[AssignmentResult, AssignmentResult] | None = None,
+    calibration: dict | None = None,
 ) -> str:
     """Crea un informe LaTeX autocontenido con los resultados esenciales."""
 
@@ -218,7 +278,8 @@ def build_summary_tex(
             r"\section{Asignación}",
             (
                 f"Se asignó la matriz del modo {_latex_escape(assigned_mode)} mediante "
-                "Todo-o-Nada. La demanda total fue "
+                f"{'Wardrop UE (Frank--Wolfe)' if assignment.method == 'ue' else 'Todo-o-Nada'}. "
+                "La demanda total fue "
                 f"{assignment.total_demand:.2f}; {assignment.assigned_demand:.2f} viajes "
                 f"fueron interzonales y {assignment.intrazonal_demand:.2f}, intrazonales."
             ),
@@ -238,25 +299,169 @@ def build_summary_tex(
     )
     for item in assignment.link_results:
         lines.append(
-            f"{_latex_escape(item.link.link_id)} & {item.link.free_flow_time:.2f} & "
+            f"{_latex_escape(item.link.link_id)} & {item.travel_time:.2f} & "
             f"{item.link.capacity:.2f} & {item.volume:.2f} & "
             f"{item.volume_capacity_ratio:.3f} \\\\"
         )
+    lines.extend([r"\bottomrule", r"\end{tabular}", r"\end{center}"])
+    if assignment.method == "ue":
+        lines.extend(
+            [
+                r"\subsection{Equilibrio y convergencia}",
+                r"$t_a=t_a^0[1+\alpha(v_a/C_a)^\beta]$. "
+                f"$\\alpha={assignment.alpha}$, $\\beta={assignment.beta}$. "
+                f"Tolerancia: {assignment.tolerance}; "
+                f"actualizaciones: {len(assignment.history) - 1}. "
+                f"{'Convergió' if assignment.converged else 'No convergió'}; "
+                f"brecha relativa final: {assignment.relative_gap:.6g}.",
+                r"Brecha: $\max(0,\sum_a t_ax_a-\sum_a t_ay_a)/\sum_a t_ax_a$; "
+                r"$y$ es la carga de caminos mínimos con los tiempos actuales. "
+                "Demanda interzonal nula: brecha cero. Las rutas mínimas finales son referencias, "
+                "no un reparto de demanda por ruta.",
+                f"Tiempo total: {assignment.total_travel_time:.4f} veh$\\cdot$min. "
+                f"Tiempo medio interzonal: {assignment.mean_travel_time:.4f} min.",
+            ]
+        )
+    if comparison:
+        lines.extend(
+            [
+                r"\subsection{Comparación sobre la misma OD y red}",
+                "AON elige rutas con tiempos libres; ambos flujos se evalúan con la misma BPR.",
+                r"\begin{center}\begin{tabular}{lrrrr}\toprule",
+                r"Arco & Flujo AON & Flujo UE & $t$ AON & $t$ UE \\",
+                r"\midrule",
+            ]
+        )
+        for a, u in zip(comparison[0].link_results, comparison[1].link_results, strict=True):
+            lines.append(
+                f"{_latex_escape(a.link.link_id)} & {a.volume:.3f} & {u.volume:.3f} & "
+                f"{a.travel_time:.3f} & {u.travel_time:.3f} \\\\"
+            )
+        lines.extend(
+            [r"\bottomrule\end{tabular}\end{center}", "UE no equivale al óptimo del sistema."]
+        )
+    if calibration:
+        lines.append(r"\section{Parámetros y calibración por etapa}")
+        _append_parameters_tex(lines, calibration)
     lines.extend(
         [
-            r"\bottomrule",
-            r"\end{tabular}",
-            r"\end{center}",
             r"\section{Alcance}",
             (
                 "Los resultados pertenecen a un caso educativo. La asignación Todo-o-Nada "
-                "no representa equilibrio de usuario ni actualiza los tiempos por congestión."
+                "usa costos fijos. Wardrop requiere funciones separables no decrecientes, "
+                "red dirigida válida y demanda/capacidades del mismo periodo. "
+                "Los parámetros de ejemplo no son calibraciones locales."
             ),
             r"\end{document}",
             "",
         ]
     )
     return "\n".join(lines)
+
+
+def _append_parameters_tex(lines: list[str], states: dict) -> None:
+    titles = {
+        "generation": "Generación y atracción",
+        "distribution": "Distribución",
+        "modal": "Elección modal",
+        "assignment": "Asignación",
+    }
+    for stage, state in states.items():
+        lines.append(r"\subsection{" + titles.get(stage, _latex_escape(stage)) + "}")
+        if stage == "generation":
+            values = state["coefficients"]
+            lines.append(
+                "Producción: "
+                + _latex_escape(state.get("production_model", "ols"))
+                + "; atracción: "
+                + _latex_escape(state.get("attraction_model", "ols"))
+                + "."
+            )
+            lines.append("OLS usa enlace identidad; Poisson y NB2 usan enlace logarítmico.")
+        elif stage == "distribution":
+            function = state.get("friction_function", "exponential")
+            values = {"friction_function": function}
+            if function != "power":
+                values["beta"] = state["beta"]
+            if function != "exponential":
+                values["alpha"] = state["alpha"]
+            lines.append(
+                r"Exponencial: $e^{-\beta c}$; potencia: $c^{-\alpha}$; "
+                r"combinada: $c^\alpha e^{-\beta c}$. "
+                r"$\beta$ en inverso de la unidad de impedancia, $\alpha$ adimensional."
+            )
+        elif stage == "modal":
+            values = {key: state[key] for key in ("time_coefficient", "cost_coefficient")}
+            for i, row in enumerate(state["modes"], 1):
+                values[f"ASC_m{i} ({row[0]})"] = row[1]
+            lines.append(
+                "Tiempo en min y costo en MXN para la calibración; "
+                "las unidades de los atributos deben corresponder a la aplicación."
+            )
+        else:
+            values = {"method": state.get("method", "aon")}
+            if values["method"] == "ue":
+                values.update(
+                    {key: state[key] for key in ("alpha", "beta", "tolerance", "iterations")}
+                )
+            elif state.get("comparison"):
+                values.update(
+                    {"alpha_BPR_comparacion": state["alpha"], "beta_BPR_comparacion": state["beta"]}
+                )
+        lines.extend(
+            [
+                r"\begin{center}\begin{tabular}{lr}\toprule",
+                r"Parámetro aplicado & Valor \\",
+                r"\midrule",
+            ]
+        )
+        for key, value in values.items():
+            display = f"{value:.8g}" if isinstance(value, (int, float)) else str(value)
+            lines.append(_latex_escape(key) + " & " + _latex_escape(display) + r" \\")
+        lines.append(r"\bottomrule\end{tabular}\end{center}")
+        panel = state.get("calibration", {})
+        applied = panel.get("applied", {})
+        lines.append(
+            "Procedencia: "
+            + (
+                "estimación aplicada en los modelos indicados; otros valores manuales o de ejemplo."
+                if applied
+                else "valores manuales o de ejemplo; no certificados como calibrados."
+            )
+        )
+        for target, result in applied.items():
+            record = panel.get("records", {}).get(target, {})
+            lines.append(
+                r"\paragraph{"
+                + _latex_escape(target)
+                + "} "
+                + _latex_escape(result["model"])
+                + ". Datos: "
+                + _latex_escape(
+                    result.get("source", record).get("filename", "observaciones integradas")
+                )
+                + "."
+            )
+            lines.extend(
+                [
+                    r"\begin{center}\begin{tabular}{lrrr}\toprule",
+                    r"Parámetro & Estimación & EE & IC 95\% \\",
+                    r"\midrule",
+                ]
+            )
+            for name, value in result["parameters"].items():
+                se, ci = (
+                    result["standard_errors"].get(name),
+                    result["confidence_intervals"].get(name),
+                )
+                se_text = f"{se:.5g}" if se is not None else "---"
+                ci_text = f"[{ci[0]:.5g}, {ci[1]:.5g}]" if ci else "---"
+                lines.append(f"{_latex_escape(name)} & {value:.7g} & {se_text} & {ci_text} \\\\")
+            lines.append(r"\bottomrule\end{tabular}\end{center}")
+            for key, value in result["metrics"].items():
+                lines.append(_latex_escape(key) + f": {value:.7g}. ")
+            for note in result["warnings"]:
+                lines.append(_latex_escape(note) + r"\par")
 
 
 def save_summary_tex(
@@ -267,6 +472,7 @@ def save_summary_tex(
     assignment: AssignmentResult,
     assigned_mode: str,
     analyst_name: str,
+    **options,
 ) -> None:
     """Guarda el resumen como fuente LaTeX UTF-8."""
 
@@ -277,6 +483,7 @@ def save_summary_tex(
         assignment,
         assigned_mode,
         analyst_name,
+        **options,
     )
     Path(path).write_text(content, encoding="utf-8")
 
