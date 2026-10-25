@@ -6,7 +6,7 @@ El proyecto busca que el estudiante pueda observar el proceso completo, modifica
 
 ## Alcance actual
 
-La versión `3.1.1` (familia **3.x**) incluye:
+La versión `3.2.0` (familia **3.x**) incluye:
 
 1. Generación y atracción de viajes.
 2. Distribución de viajes.
@@ -38,6 +38,10 @@ distribución gravitacional, elección modal logit y asignación Todo-o-Nada o W
 Se conservan los parámetros manuales y se añade calibración por etapa con datos observados.
 La interfaz usa Latin Modern Roman y temas neutrales claro/oscuro; el menú **Apariencia**
 permite seguir al sistema o elegir un tema. Las fuentes incluidas conservan su licencia GUST/LPPL.
+La pestaña **Microsimulación SUMO** añade evaluación vehicular opcional después de
+la asignación: geometría editable, conversión de personas a vehículos, demanda
+temporal, ejecución cancelable, indicadores y contraste con una referencia estática.
+Las cuatro etapas siguen funcionando sin instalar SUMO.
 La versión
 funcional anterior se conserva en la rama `release/v0.2.0`; también sigue disponible
 `release/v0.1.0`. La numeración pasa de 0.2.0 a 3.0.0 por decisión del proyecto.
@@ -89,6 +93,30 @@ funcional anterior se conserva en la rama `release/v0.2.0`; también sigue dispo
 - NetworkX para redes y asignación.
 - Matplotlib para visualizaciones didácticas.
 - pytest para pruebas automatizadas.
+
+## Microsimulación opcional con SUMO
+
+En el entorno virtual existente, instale el motor opcional:
+
+```bash
+python -m pip install -e ".[sumo]"
+macronet
+```
+
+También puede utilizar una instalación del sistema de Eclipse SUMO 1.18 o posterior.
+En Ubuntu: `sudo apt install sumo sumo-tools`. En **Microsimulación SUMO**, pulse
+**Comprobar SUMO**; si no se detecta, seleccione su carpeta `bin`.
+
+Después de calcular la asignación, revise el modo vial, las unidades de la OD,
+la ocupación, el periodo, la geometría y la capacidad por periodo. Confirme la
+revisión y pulse **Ejecutar SUMO…**. Se crea una carpeta nueva con escenario,
+registros, manifiesto, resultados XML y `comparison.csv`. El botón **Exportar
+escenario sin ejecutar…** funciona aunque SUMO no esté instalado.
+
+El ejercicio `.mnet` conserva configuración, geometría, indicadores y procedencia;
+los XML y registros completos permanecen en la carpeta de ejecución. La apertura
+de un ejercicio no ejecuta SUMO. La guía, supuestos y límites están en
+[`docs/sumo-integration.md`](docs/sumo-integration.md).
 
 ## Ejecución durante el desarrollo
 

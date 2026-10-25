@@ -41,6 +41,7 @@ class SummaryWidget(QWidget):
         self.assigned_mode = "Automóvil"
         self.comparison_result = None
         self.metadata_provider = lambda: {}
+        self.microsimulation_provider = lambda: None
         self.analyst_name = ""
         self._build_ui()
 
@@ -231,6 +232,7 @@ class SummaryWidget(QWidget):
                 self.analyst_name,
                 comparison=self.comparison_result,
                 calibration=self.metadata_provider(),
+                microsimulation=self.microsimulation_provider(),
             )
         except OSError as error:
             QMessageBox.critical(self, "No se pudo guardar", str(error))
