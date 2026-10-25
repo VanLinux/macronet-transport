@@ -10,8 +10,9 @@ from pathlib import Path
 
 from macronet import __version__
 from macronet.domain.generation import GenerationCoefficients
+from macronet.sumo.scenario import validate_saved_state
 
-FORMAT_VERSION = 2
+FORMAT_VERSION = 3
 STAGES = ("generation", "distribution", "modal", "assignment")
 MAX_PROJECT_BYTES = 10 * 1024 * 1024
 
@@ -25,7 +26,11 @@ def validate_project(document: object) -> None:
 
     if not isinstance(document, dict) or document.get("format") != "MacroNet Transport":
         raise ProjectError("El archivo no es un ejercicio de MacroNet Transport.")
-    if type(document.get("format_version")) is not int or document["format_version"] not in (1, 2):
+    if type(document.get("format_version")) is not int or document["format_version"] not in (
+        1,
+        2,
+        3,
+    ):
         raise ProjectError("Versión de archivo .mnet incompatible. Actualice MacroNet.")
     try:
         _safe_tree(document)
@@ -50,8 +55,13 @@ def validate_project(document: object) -> None:
         if len(set(sizes)) != 1:
             raise ValueError("Las etapas tienen diferentes dimensiones de zonas.")
         view = document["view"]
-        _number(view["tab"], 0, 5, integer=True)
+        _number(view["tab"], 0, 6 if document["format_version"] >= 3 else 5, integer=True)
         _number(view["od"], 0, sizes[0] ** 2 - 1, integer=True)
+        if "microsimulation" in document:
+            validate_saved_state(document["microsimulation"])
+            last_run = document["microsimulation"]["last_run"]
+            if last_run:
+                _validate_state("assignment", last_run["inputs"]["source"])
     except (KeyError, TypeError, ValueError, AttributeError) as error:
         raise ProjectError(
             f"El archivo .mnet contiene datos incompletos o inválidos: {error}"
@@ -273,7 +283,7 @@ def load_project(path: str | Path) -> dict:
                         comparison=False,
                     ).items():
                         state.setdefault(key, value)
-        document["format_version"] = FORMAT_VERSION
+    document["format_version"] = FORMAT_VERSION
     return document
 
 

@@ -202,6 +202,7 @@ def build_summary_tex(
     *,
     comparison: tuple[AssignmentResult, AssignmentResult] | None = None,
     calibration: dict | None = None,
+    microsimulation: dict | None = None,
 ) -> str:
     """Crea un informe LaTeX autocontenido con los resultados esenciales."""
 
@@ -343,6 +344,8 @@ def build_summary_tex(
     if calibration:
         lines.append(r"\section{Parámetros y calibración por etapa}")
         _append_parameters_tex(lines, calibration)
+    if microsimulation and microsimulation.get("last_run"):
+        _append_sumo_tex(lines, microsimulation)
     lines.extend(
         [
             r"\section{Alcance}",
@@ -357,6 +360,73 @@ def build_summary_tex(
         ]
     )
     return "\n".join(lines)
+
+
+def _append_sumo_tex(lines, state):
+    run = state["last_run"]
+    settings = run["inputs"]["settings"]
+    lines.extend(
+        [
+            r"\section{Microsimulación opcional con SUMO}",
+            "Instantánea independiente de las cuatro etapas. "
+            + (
+                "Corresponde a una ejecución anterior; los datos actuales cambiaron."
+                if state.get("stale")
+                else "Corresponde al escenario registrado en esta ejecución."
+            ),
+            "Modo: " + _latex_escape(run["inputs"]["source"]["mode_name"]) + ". ",
+            f"Periodo de demanda: {settings['period_s']} s; despeje: {settings['clearance_s']} s; "
+            f"semilla: {settings['seed']}; ocupación declarada: {settings['occupancy']:.3f} "
+            "personas/vehículo (aplicada sólo a viajes-persona). ",
+            "Unidades de origen: "
+            + _latex_escape(settings["demand_unit"])
+            + "; salidas: "
+            + _latex_escape(settings["departures"])
+            + f"; multiplicador: {settings['multiplier']:.3f}. ",
+            _latex_escape(run["methodology"]),
+            f"Vehículos generados: {run['generated']}; demanda intracentroide excluida: "
+            f"{run['excluded_intrazonal_vehicles']:.4f} vehículos equivalentes; "
+            f"ajuste de redondeo: {run['rounding_error']:+.4f} vehículos. ",
+        ]
+    )
+    if run["status"] == "completed":
+        stats = run["statistics"]
+        lines.extend(
+            [r"\begin{center}\begin{tabular}{lr}\toprule", r"Indicador & Valor \\", r"\midrule"]
+        )
+        for key, label in (
+            ("inserted", "Vehículos insertados"),
+            ("arrived", "Recorridos completados"),
+            ("running", "Vehículos todavía en red"),
+            ("pending", "Pendientes de insertar"),
+            ("removed", "Retirados sin completar"),
+            ("mean_duration_s", "Tiempo medio de recorrido (s)"),
+            ("mean_waiting_s", "Espera media (s)"),
+            ("mean_time_loss_s", "Pérdida media de tiempo (s)"),
+            ("mean_depart_delay_s", "Retraso medio de inserción (s)"),
+            ("mean_speed_kmh", "Velocidad agregada (km/h)"),
+        ):
+            value = stats[key]
+            display = f"{value:.3f}" if value is not None else "Sin llegadas"
+            lines.append(_latex_escape(label) + " & " + display + r" \\")
+        lines.extend(
+            [
+                r"\bottomrule\end{tabular}\end{center}",
+                "Los promedios de viaje incluyen sólo recorridos completados. "
+                "La velocidad agregada es distancia total / tiempo total de esos recorridos. "
+                "El contraste por arco usa muestras de todo el horizonte, incluido el despeje. "
+                "Estos indicadores no certifican equilibrio dinámico ni calibración local.",
+            ]
+        )
+    else:
+        lines.append("Escenario preparado sin ejecutar: no hay resultados de microsimulación.")
+    lines.append(
+        "Versión SUMO: "
+        + _latex_escape(run.get("versions", {}).get("sumo", "sin ejecutar"))
+        + ". Huella de entradas: "
+        + _latex_escape(run["fingerprint"])
+        + "."
+    )
 
 
 def _append_parameters_tex(lines: list[str], states: dict) -> None:

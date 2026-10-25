@@ -169,6 +169,7 @@ def capture_document(tabs) -> dict:
         if summary.comparison_result
         else [],
     }
+    document["microsimulation"] = tabs.microsimulation.state()
     return document
 
 
@@ -204,6 +205,10 @@ def restore_document(tabs, document: dict) -> None:
     for stage, widget in tabs.stages.items():
         restore_inputs(stage, widget, document["draft"][stage])
     tabs.calculated_states = document["calculated"]
+    if "microsimulation" in document:
+        tabs.microsimulation.restore_state(document["microsimulation"])
+    else:
+        tabs.microsimulation.update_geometry(document["calculated"]["assignment"], preserve=False)
     tabs.widget(3).od_selector.setCurrentIndex(
         min(document["view"]["od"], tabs.widget(3).od_selector.count() - 1)
     )

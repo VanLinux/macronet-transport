@@ -30,3 +30,26 @@ jobs:
         run: ruff check .
       - name: Test
         run: pytest
+
+  sumo:
+    name: SUMO real (${{ matrix.os }}, Python 3.12)
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install Qt runtime libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1
+      - name: Install project and optional SUMO engine
+        run: python -m pip install -e ".[dev,sumo]"
+      - name: Test with native SUMO
+        run: pytest

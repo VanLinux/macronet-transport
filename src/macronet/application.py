@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -26,10 +26,12 @@ from PySide6.QtWidgets import (
 from macronet import __version__
 from macronet.domain.four_step import FOUR_STEP_SEQUENCE
 from macronet.project import ProjectError, load_project, save_project
+from macronet.sumo.scenario import SumoError
 from macronet.ui.appearance import Appearance, make_scrollable
 from macronet.ui.assignment_widget import AssignmentWidget
 from macronet.ui.distribution_widget import DistributionWidget
 from macronet.ui.generation_widget import GenerationWidget
+from macronet.ui.microsimulation_widget import MicrosimulationWidget
 from macronet.ui.mode_choice_widget import ModeChoiceWidget
 from macronet.ui.project_state import capture_document, capture_inputs, restore_document
 from macronet.ui.summary_widget import SummaryWidget
@@ -68,6 +70,7 @@ class MainWindow(QMainWindow):
         self.resize(1280, 900)
         self.project_path: Path | None = None
         self._dirty = False
+        self._close_after_sumo = False
         self._install_tabs(ExerciseTabs())
         file_menu = self.menuBar().addMenu("Archivo")
         for title, shortcut, callback in (
@@ -104,6 +107,12 @@ class MainWindow(QMainWindow):
             if hasattr(widget, "calibration"):
                 widget.calibration.changed.connect(self._mark_dirty)
         tabs.widget(5).analyst_changed.connect(self._mark_dirty)
+        tabs.microsimulation.changed.connect(self._mark_dirty)
+        tabs.microsimulation.running_changed.connect(self._sumo_running_changed)
+
+    def _sumo_running_changed(self, running):
+        if not running and self._close_after_sumo:
+            QTimer.singleShot(0, self.close)
 
     def _mark_dirty(self, *_args) -> None:
         self._dirty = True
@@ -188,6 +197,13 @@ class MainWindow(QMainWindow):
     def open_project_path(self, path: Path) -> bool:
         """Prepara una vista completa y solo la sustituye si el archivo es válido."""
 
+        if self.centralWidget().microsimulation.is_running:
+            QMessageBox.information(
+                self,
+                "Microsimulación en curso",
+                "Cancele o espere la ejecución antes de abrir otro ejercicio.",
+            )
+            return False
         # Guardar antes de leer evita reabrir una copia antigua del mismo archivo.
         if not self._confirm_unsaved():
             return False
@@ -213,10 +229,17 @@ class MainWindow(QMainWindow):
         return True
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        if self._confirm_unsaved():
-            event.accept()
-        else:
+        simulation = self.centralWidget().microsimulation
+        if simulation.is_running:
+            self._close_after_sumo = True
+            simulation.cancel()
             event.ignore()
+        else:
+            self._close_after_sumo = False
+            if self._confirm_unsaved():
+                event.accept()
+            else:
+                event.ignore()
 
 
 class ExerciseTabs(QTabWidget):
@@ -232,6 +255,7 @@ class ExerciseTabs(QTabWidget):
         mode_choice_widget = ModeChoiceWidget()
         assignment_widget = AssignmentWidget()
         summary_widget = SummaryWidget()
+        self.microsimulation = MicrosimulationWidget(self._sumo_source)
         generation_widget.result_calculated.connect(distribution_widget.set_from_generation)
         generation_widget.result_calculated.connect(summary_widget.set_from_generation)
         distribution_widget.result_calculated.connect(mode_choice_widget.set_from_distribution)
@@ -239,11 +263,13 @@ class ExerciseTabs(QTabWidget):
         mode_choice_widget.result_calculated.connect(assignment_widget.set_from_mode_choice)
         mode_choice_widget.result_calculated.connect(summary_widget.set_from_mode_choice)
         assignment_widget.result_calculated.connect(self._update_assignment_summary)
+        assignment_widget.result_calculated.connect(self.microsimulation.invalidate)
         tabs.addTab(generation_widget, "1. Generación y atracción")
         tabs.addTab(distribution_widget, "2. Distribución")
         tabs.addTab(mode_choice_widget, "3. Elección modal")
         tabs.addTab(assignment_widget, "4. Asignación")
         tabs.addTab(summary_widget, "Resumen")
+        tabs.addTab(self.microsimulation, "Microsimulación SUMO")
 
         if generation_widget.current_result is not None:
             summary_widget.set_from_generation(generation_widget.current_result)
@@ -271,8 +297,19 @@ class ExerciseTabs(QTabWidget):
         for widget in self.stages.values():
             widget.result_calculated.connect(self._capture_calculated_state)
         summary_widget.metadata_provider = self._report_metadata
-        for widget in (*self.stages.values(), summary_widget):
+        summary_widget.microsimulation_provider = self.microsimulation.state
+        self.microsimulation.sync_geometry()
+        for widget in (*self.stages.values(), summary_widget, self.microsimulation):
             make_scrollable(widget)
+
+    def _sumo_source(self):
+        source = self.calculated_states["assignment"]
+        if capture_inputs("assignment", self.stages["assignment"]) != source:
+            raise SumoError(
+                "Hay cambios de asignación pendientes. Pulse Asignar o Comparar "
+                "antes de preparar la microsimulación."
+            )
+        return source
 
     def _report_metadata(self):
         return self.calculated_states

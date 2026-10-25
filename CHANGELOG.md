@@ -1,5 +1,28 @@
 # Bitácora de versiones — MacroNet Transport
 
+## 3.2.0 — 2026-10-24
+
+- Integración opcional de Eclipse SUMO después de la asignación, conservando
+  las cuatro etapas, AON/Wardrop, la calibración y las exportaciones existentes.
+- Geometría vial editable, correspondencia de nodos/arcos y TAZ por centroide;
+  conversión explícita de viajes-persona a vehículos, multiplicador de demanda,
+  redondeo por resto mayor y exclusión documentada de viajes intracentroide.
+- Referencia estática recalculada con la misma OD vehicular y tiempos de flujo
+  libre de la geometría. Enrutamiento único con esos costos, sin presentar el
+  resultado como equilibrio dinámico ni como reproducción del reparto UE.
+- Ejecución sin GUI mediante netconvert/duarouter/sumo, en un trabajador separado,
+  con cancelación de procesos, límite de tiempo real y cierre seguro de la ventana.
+- Indicadores de recorridos completados, vehículos pendientes/en red/retirados,
+  evolución temporal y contraste por arco. Carpeta única por escenario con XML,
+  CSV, semillas, versiones, comandos, huellas de archivos y registros de errores.
+- `.mnet` esquema 3: configuración, borradores de geometría y última ejecución;
+  conserva compatibilidad de lectura con esquemas 1 y 2. Reporte LaTeX carta con
+  una sección separada de microsimulación y aviso de resultados anteriores.
+- Dependencia SUMO opcional (`.[sumo]`), exportación de escenarios sin el motor
+  instalado y guía de instalación, metodología y límites de la primera integración.
+- Pruebas de motor real, conservación, reproducibilidad, cancelación, respuesta
+  gráfica, persistencia, archivos antiguos y CI adicional con SUMO en Ubuntu/Windows.
+
 ## 3.1.1 — 2026-10-23
 
 - Corregido el crecimiento continuo de las gráficas al abrir **Convergencia UE**
