@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
 
 from macronet import __version__
 
-CONTACT_EMAIL = "prof.benite.gh@mail.com"
+CONTACT_EMAIL = "prof.benitezgh@gmail.com"
 
 
 def contact_url():

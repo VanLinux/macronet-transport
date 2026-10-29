@@ -16,7 +16,7 @@
   detalle modal, e informe carta con reglas, matrices y comparación de escenarios.
   Esquema de archivo 4, con lectura de esquemas 1, 2 y 3.
 - Ayuda → Acerca de con descripción, autoría, GPL-3.0-only y opción Contacto:
-  correo confirmado `prof.benite.gh@mail.com`, copia y apertura del cliente de correo.
+  correo de contacto `prof.benitezgh@gmail.com`, copia y apertura del cliente de correo.
 - Integración mediante un botón en elección modal y los diálogos necesarios;
   se conserva la apariencia general, distribución, asignación y motor SUMO.
 
