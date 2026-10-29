@@ -99,7 +99,7 @@ resultados se exportan en CSV y se incorporan al informe LaTeX. Consulte
 [`docs/fares.md`](docs/fares.md) para unidades, límites y comparación.
 
 En **Ayuda → Acerca de… → Contacto** encontrará el correo del autor,
-`prof.benite.gh@mail.com`, con opciones para copiarlo o abrir su aplicación de correo.
+`prof.benitezgh@gmail.com`, con opciones para copiarlo o abrir su aplicación de correo.
 
 ## Tecnología prevista
 

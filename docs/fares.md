@@ -112,7 +112,7 @@ pronóstico depende de datos y coeficientes adecuados al caso de estudio.
 ## Contacto
 
 En **Ayuda → Acerca de… → Contacto**, el correo del autor es
-`prof.benite.gh@mail.com`. Se puede copiar o abrir el cliente de correo con un
+`prof.benitezgh@gmail.com`. Se puede copiar o abrir el cliente de correo con un
 asunto de sugerencias. La aplicación no envía mensajes ni adjunta datos por sí sola.
 
 ## Verificación

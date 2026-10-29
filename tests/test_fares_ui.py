@@ -123,7 +123,7 @@ def test_contact_uses_confirmed_address_and_only_opens_mail_client(window, monke
             button.click()
         if button.text() == "Copiar correo":
             button.click()
-    assert CONTACT_EMAIL == "prof.benite.gh@mail.com"
+    assert CONTACT_EMAIL == "prof.benitezgh@gmail.com"
     assert len(urls) == 1 and urls[0].scheme() == "mailto" and urls[0].path() == CONTACT_EMAIL
     assert QApplication.clipboard().text() == CONTACT_EMAIL
     dialog.deleteLater()
