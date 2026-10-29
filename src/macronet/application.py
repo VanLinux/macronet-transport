@@ -91,7 +91,19 @@ class MainWindow(QMainWindow):
             action.setChecked(mode == "auto")
             action.triggered.connect(lambda _checked, value=mode: self.appearance.set_mode(value))
             view_menu.addAction(action)
+        help_menu = self.menuBar().addMenu("Ayuda")
+        about = help_menu.addAction("Acerca de…")
+        about.triggered.connect(self._show_about)
         self._update_title()
+
+    def _show_about(self):
+        from macronet.ui.about_dialog import AboutDialog
+
+        dialog = AboutDialog(self)
+        try:
+            dialog.exec()
+        finally:
+            dialog.deleteLater()
 
     def _install_tabs(self, tabs) -> None:
         self.setCentralWidget(tabs)
@@ -107,6 +119,7 @@ class MainWindow(QMainWindow):
             if hasattr(widget, "calibration"):
                 widget.calibration.changed.connect(self._mark_dirty)
         tabs.widget(5).analyst_changed.connect(self._mark_dirty)
+        tabs.widget(3).fares_changed.connect(self._mark_dirty)
         tabs.microsimulation.changed.connect(self._mark_dirty)
         tabs.microsimulation.running_changed.connect(self._sumo_running_changed)
 
@@ -297,6 +310,7 @@ class ExerciseTabs(QTabWidget):
         for widget in self.stages.values():
             widget.result_calculated.connect(self._capture_calculated_state)
         summary_widget.metadata_provider = self._report_metadata
+        summary_widget.fare_scenarios_provider = lambda: mode_choice_widget.fare_scenarios
         summary_widget.microsimulation_provider = self.microsimulation.state
         self.microsimulation.sync_geometry()
         for widget in (*self.stages.values(), summary_widget, self.microsimulation):

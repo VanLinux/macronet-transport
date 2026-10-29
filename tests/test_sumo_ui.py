@@ -122,7 +122,7 @@ def test_schema_two_opens_without_sumo_and_retains_analytic_results(window, tmp_
     document.pop("microsimulation")
     path = tmp_path / "v3-1-1.mnet"
     path.write_text(json.dumps(document), encoding="utf-8")
-    assert load_project(path)["format_version"] == 3
+    assert load_project(path)["format_version"] == 4
     assert window.open_project_path(path)
     assert window.centralWidget().widget(4).current_result == original
     assert window.centralWidget().microsimulation.last_run is None

@@ -9,10 +9,12 @@ import tempfile
 from pathlib import Path
 
 from macronet import __version__
+from macronet.domain.fare_scenarios import evaluate_snapshot
+from macronet.domain.fares import validate_profiles
 from macronet.domain.generation import GenerationCoefficients
 from macronet.sumo.scenario import validate_saved_state
 
-FORMAT_VERSION = 3
+FORMAT_VERSION = 4
 STAGES = ("generation", "distribution", "modal", "assignment")
 MAX_PROJECT_BYTES = 10 * 1024 * 1024
 
@@ -30,6 +32,7 @@ def validate_project(document: object) -> None:
         1,
         2,
         3,
+        4,
     ):
         raise ProjectError("Versión de archivo .mnet incompatible. Actualice MacroNet.")
     try:
@@ -62,6 +65,19 @@ def validate_project(document: object) -> None:
             last_run = document["microsimulation"]["last_run"]
             if last_run:
                 _validate_state("assignment", last_run["inputs"]["source"])
+        scenarios = document.get("fare_scenarios", [])
+        if not isinstance(scenarios, list) or len(scenarios) > 20:
+            raise ValueError("Se admiten hasta 20 escenarios tarifarios.")
+        scenario_names = []
+        for scenario in scenarios:
+            _text(scenario["name"])
+            if not scenario["name"].strip() or len(scenario["name"]) > 100:
+                raise ValueError("Nombre de escenario tarifario inválido.")
+            scenario_names.append(scenario["name"].strip().casefold())
+            _validate_state("modal", scenario["inputs"])
+            evaluate_snapshot(scenario["inputs"])
+        if len(set(scenario_names)) != len(scenario_names):
+            raise ValueError("Los escenarios deben tener nombres únicos.")
     except (KeyError, TypeError, ValueError, AttributeError) as error:
         raise ProjectError(
             f"El archivo .mnet contiene datos incompletos o inválidos: {error}"
@@ -106,6 +122,7 @@ def _validate_state(stage: str, state: dict) -> None:
         for name in names:
             _text(name)
         if stage == "modal":
+            validate_profiles(state.get("fare_profiles", []))
             _table(state["modes"], 6, rows=3)
             _number(state["time_coefficient"], -100, 0)
             _number(state["cost_coefficient"], -100, 0)
@@ -284,6 +301,9 @@ def load_project(path: str | Path) -> dict:
                     ).items():
                         state.setdefault(key, value)
     document["format_version"] = FORMAT_VERSION
+    for section in ("draft", "calculated"):
+        document[section]["modal"].setdefault("fare_profiles", [])
+    document.setdefault("fare_scenarios", [])
     return document
 
 

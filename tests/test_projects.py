@@ -319,7 +319,7 @@ def test_schema_one_opens_with_original_aon_and_ols_defaults(window, tmp_path):
                 state.pop(key)
     path = tmp_path / "version_3_0.mnet"
     path.write_text(json.dumps(document))
-    assert load_project(path)["format_version"] == 3
+    assert load_project(path)["format_version"] == 4
     assert window.open_project_path(path)
     assignment = window.centralWidget().widget(4)
     assert assignment.method_selector.currentData() == "aon"

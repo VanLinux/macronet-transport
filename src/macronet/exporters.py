@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from io import StringIO
 from pathlib import Path
 
@@ -10,6 +11,8 @@ import networkx as nx
 
 from macronet.domain.assignment import AssignmentResult
 from macronet.domain.distribution import DistributionResult
+from macronet.domain.fare_scenarios import compare_scenarios, evaluate_snapshot
+from macronet.domain.fares import DISTANCE_SOURCES, SCHEMES
 from macronet.domain.generation import GenerationResult
 from macronet.domain.mode_choice import ModeChoiceResult
 
@@ -70,6 +73,80 @@ def save_modal_csv(path: str | Path, result: ModeChoiceResult) -> None:
     """Guarda todas las matrices modales en UTF-8 con BOM."""
 
     Path(path).write_text(build_modal_csv(result), encoding="utf-8-sig", newline="")
+
+
+def build_fare_csv(scenarios: list[dict]) -> str:
+    """Costos y distancias de cada instantánea; todos los importes activos son MXN."""
+    if not scenarios:
+        raise ValueError("Guarde al menos un escenario para exportar.")
+    output = StringIO(newline="")
+    writer = csv.writer(output, lineterminator="\n")
+    writer.writerow(
+        (
+            "Escenario",
+            "Modo",
+            "Esquema",
+            "Origen",
+            "Destino",
+            "Distancia_km",
+            "Origen_distancia",
+            "Fuente_distancia",
+            "Costo_MXN",
+            "Tiempo_min",
+            "Utilidad",
+            "Probabilidad",
+            "Viajes",
+            "Total_OD",
+            "Tarifa_base_MXN",
+            "MXN_por_km",
+            "Intervalos_limite_km_tarifa_MXN",
+            "Beta_t",
+            "Beta_c",
+            "ASC",
+            "Costo_fijo_actual",
+            "Costo_variable_por_unidad_impedancia_actual",
+        )
+    )
+    for scenario in scenarios:
+        inputs = scenario["inputs"]
+        result = evaluate_snapshot(inputs)
+        for i, row in enumerate(result.od_results):
+            for j, od in enumerate(row):
+                for k, alternative in enumerate(od.alternatives):
+                    detail = result.fare_details[k] if result.fare_details else None
+                    writer.writerow(
+                        (
+                            scenario["name"],
+                            alternative.mode_name,
+                            detail.scheme if detail else "legacy",
+                            od.origin,
+                            od.destination,
+                            detail.distances[i][j]
+                            if detail and detail.distances is not None
+                            else "",
+                            detail.distance_source
+                            if detail and detail.distances is not None
+                            else "",
+                            detail.distance_note if detail and detail.distances is not None else "",
+                            alternative.monetary_cost,
+                            alternative.travel_time,
+                            alternative.utility,
+                            alternative.probability,
+                            alternative.trips,
+                            od.total_trips,
+                            detail.fixed if detail and detail.scheme in ("flat", "mixed") else "",
+                            detail.rate if detail and detail.scheme in ("per_km", "mixed") else "",
+                            json.dumps(detail.bands, ensure_ascii=False)
+                            if detail and detail.bands
+                            else "",
+                            inputs["time_coefficient"],
+                            inputs["cost_coefficient"],
+                            inputs["modes"][k][1],
+                            inputs["modes"][k][4],
+                            inputs["modes"][k][5],
+                        )
+                    )
+    return output.getvalue()
 
 
 def build_assignment_csv(
@@ -203,6 +280,7 @@ def build_summary_tex(
     comparison: tuple[AssignmentResult, AssignmentResult] | None = None,
     calibration: dict | None = None,
     microsimulation: dict | None = None,
+    fare_scenarios: list[dict] | None = None,
 ) -> str:
     """Crea un informe LaTeX autocontenido con los resultados esenciales."""
 
@@ -240,6 +318,8 @@ def build_summary_tex(
         r"Zona & Producción $P_i$ & Atracción $A_i$ & Balanceada $A_i^*$ \\",
         r"\midrule",
     ]
+    if mode_choice.fare_details or fare_scenarios:
+        lines.insert(lines.index(r"\begin{document}"), r"\usepackage{longtable}")
     for item in generation.zones:
         lines.append(
             f"{_latex_escape(item.zone.name)} & {item.production:.2f} & "
@@ -344,6 +424,8 @@ def build_summary_tex(
     if calibration:
         lines.append(r"\section{Parámetros y calibración por etapa}")
         _append_parameters_tex(lines, calibration)
+    if mode_choice.fare_details or fare_scenarios:
+        _append_fares_tex(lines, mode_choice, fare_scenarios or [])
     if microsimulation and microsimulation.get("last_run"):
         _append_sumo_tex(lines, microsimulation)
     lines.extend(
@@ -360,6 +442,108 @@ def build_summary_tex(
         ]
     )
     return "\n".join(lines)
+
+
+def _fare_description(lines, mode_name, detail):
+    lines.append(r"\paragraph{" + _latex_escape(mode_name) + "} " + SCHEMES[detail.scheme] + ". ")
+    if detail.scheme in ("flat", "mixed"):
+        lines.append(f"Tarifa plana/base: {detail.fixed:.6g} MXN. ")
+    if detail.scheme in ("per_km", "mixed"):
+        lines.append(f"Cargo: {detail.rate:.6g} MXN/km. ")
+    if detail.bands:
+        previous = 0
+        for k, (upper, fare) in enumerate(detail.bands):
+            bound = f"{previous:g} < d" if k else r"0 \leq d"
+            if upper is not None:
+                bound += r" \leq " + f"{upper:g}"
+            lines.append("$" + bound + f"$ km: {fare:g} MXN. ")
+            previous = upper
+    if detail.distances is not None:
+        lines.append(
+            "Distancias en km: "
+            + DISTANCE_SOURCES[detail.distance_source]
+            + ". "
+            + _latex_escape(detail.distance_note)
+            + ". "
+        )
+    lines.append(r"\par")
+
+
+def _append_fares_tex(lines, result, scenarios):
+    lines.extend(
+        [
+            r"\section{Tarifas y costos de viaje}",
+            "Los esquemas activos sustituyen el costo monetario anterior del modo. "
+            "Tarifas en MXN por persona y viaje; distancias en km, incluidas las intrazonales. "
+            "El total OD se mantiene fijo: los escenarios evalúan reparto modal, "
+            "sin estimar viajes inducidos ni cambios de destino.",
+        ]
+    )
+    for k, detail in enumerate(result.fare_details):
+        if detail.scheme == "legacy":
+            continue
+        _fare_description(lines, result.mode_summaries[k].mode_name, detail)
+        lines.extend(
+            [
+                r"\begin{longtable}{p{0.25\linewidth}p{0.25\linewidth}rr}\toprule",
+                r"Origen & Destino & Distancia (km) & Costo (MXN) \\",
+                r"\midrule\endhead",
+            ]
+        )
+        for i, origin in enumerate(result.zone_names):
+            for j, destination in enumerate(result.zone_names):
+                distance = (
+                    f"{detail.distances[i][j]:.6g}" if detail.distances is not None else "---"
+                )
+                lines.append(
+                    _latex_escape(origin)
+                    + " & "
+                    + _latex_escape(destination)
+                    + f" & {distance} & {detail.costs[i][j]:.6g}"
+                    + r" \\"
+                )
+        lines.append(r"\bottomrule\end{longtable}")
+    if not scenarios:
+        return
+    lines.append(r"\subsection{Escenarios tarifarios guardados}")
+    try:
+        comparison = compare_scenarios(scenarios)
+    except ValueError:
+        comparison = []
+        lines.append(
+            "Los escenarios contienen contextos distintos; se muestran resultados "
+            "independientes y no se atribuyen sus diferencias sólo a las tarifas."
+        )
+    delta = {(row["scenario"], row["mode"]): row for row in comparison}
+    for scenario in scenarios:
+        current = evaluate_snapshot(scenario["inputs"])
+        lines.append(r"\subsubsection{" + _latex_escape(scenario["name"]) + "}")
+        lines.append(
+            f"Total OD: {current.total_trips:.6g}; "
+            + r"$\beta_t$="
+            + f"{scenario['inputs']['time_coefficient']:.6g}; "
+            + r"$\beta_c$="
+            + f"{scenario['inputs']['cost_coefficient']:.6g}. "
+        )
+        for k, mode in enumerate(current.mode_summaries):
+            lines.append(
+                _latex_escape(mode.mode_name)
+                + f": {mode.total_trips:.6g} viajes; {100 * mode.share:.4f}"
+                + r"\%. "
+            )
+            if delta:
+                row = delta[(scenario["name"], mode.mode_name)]
+                lines.append(
+                    f"Cambio respecto al primer escenario: {row['delta_trips']:+.6g} viajes; "
+                    f"{row['delta_pp']:+.4f} puntos porcentuales. "
+                )
+            if current.fare_details and current.fare_details[k].scheme != "legacy":
+                _fare_description(lines, mode.mode_name, current.fare_details[k])
+            lines.append(r"\par")
+        lines.append(
+            "Las matrices completas de cada instantánea se conservan en el ejercicio "
+            "y en la exportación CSV de escenarios."
+        )
 
 
 def _append_sumo_tex(lines, state):
