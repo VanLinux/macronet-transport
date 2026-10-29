@@ -71,6 +71,7 @@ def capture_inputs(stage: str, widget) -> dict:
             "trip_matrix": _matrix(widget._trip_matrix),
             "impedance_matrix": _matrix(widget._impedance_matrix),
             "calibration": calibration,
+            "fare_profiles": copy.deepcopy(widget.fare_profiles),
         }
     return {
         "centroids": table_values(widget.zone_nodes_table),
@@ -123,6 +124,7 @@ def _restore_inputs(stage: str, widget, state: dict) -> None:
         widget._zone_names = tuple(state["zone_names"])
         widget._trip_matrix = tuple(tuple(row) for row in state["trip_matrix"])
         widget._impedance_matrix = tuple(tuple(row) for row in state["impedance_matrix"])
+        widget.fare_profiles = copy.deepcopy(state.get("fare_profiles", []))
         widget.time_coefficient_input.setValue(state["time_coefficient"])
         widget.cost_coefficient_input.setValue(state["cost_coefficient"])
         widget._populate_od_selector()
@@ -170,6 +172,7 @@ def capture_document(tabs) -> dict:
         else [],
     }
     document["microsimulation"] = tabs.microsimulation.state()
+    document["fare_scenarios"] = copy.deepcopy(tabs.widget(3).fare_scenarios)
     return document
 
 
@@ -205,6 +208,7 @@ def restore_document(tabs, document: dict) -> None:
     for stage, widget in tabs.stages.items():
         restore_inputs(stage, widget, document["draft"][stage])
     tabs.calculated_states = document["calculated"]
+    tabs.widget(3).fare_scenarios = copy.deepcopy(document.get("fare_scenarios", []))
     if "microsimulation" in document:
         tabs.microsimulation.restore_state(document["microsimulation"])
     else:

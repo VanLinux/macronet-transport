@@ -6,7 +6,7 @@ El proyecto busca que el estudiante pueda observar el proceso completo, modifica
 
 ## Alcance actual
 
-La versión `3.2.0` (familia **3.x**) incluye:
+La versión `3.3.0` (familia **3.x**) incluye:
 
 1. Generación y atracción de viajes.
 2. Distribución de viajes.
@@ -42,9 +42,9 @@ La pestaña **Microsimulación SUMO** añade evaluación vehicular opcional desp
 la asignación: geometría editable, conversión de personas a vehículos, demanda
 temporal, ejecución cancelable, indicadores y contraste con una referencia estática.
 Las cuatro etapas siguen funcionando sin instalar SUMO.
-La versión
-funcional anterior se conserva en la rama `release/v0.2.0`; también sigue disponible
-`release/v0.1.0`. La numeración pasa de 0.2.0 a 3.0.0 por decisión del proyecto.
+La versión anterior se conserva en `release/v3.2.0`. Las ramas históricas
+`release/v0.2.0` y `release/v0.1.0` siguen disponibles. La numeración pasó de
+0.2.0 a 3.0.0 por decisión del proyecto y continúa dentro de la familia 3.x.
 
 ## Guardar, continuar y exportar
 
@@ -83,6 +83,23 @@ funcional anterior se conserva en la rama `release/v0.2.0`; también sigue dispo
   en el ejercicio. El archivo se compila con `pdflatex resumen_macronet.tex` para
   obtener un PDF carta. El programa exporta la fuente `.tex`; no requiere LaTeX
   para ejecutar los modelos.
+
+## Tarifas y costos de viaje
+
+En **3. Elección modal → Tarifas y costos de viaje…** puede conservar el cálculo
+actual o elegir, para cada modo, una tarifa plana, por intervalos, por kilómetro
+o mixta. Un esquema activo sustituye el costo fijo + variable anterior del modo.
+Los importes son MXN por persona y viaje; las tarifas por distancia requieren
+su propia matriz en km, con origen sobre red o estimación entre zonas.
+
+El editor permite importar/exportar distancias, consultar costos monetarios y
+guardar escenarios para compararlos con la misma OD, tiempos y coeficientes.
+La configuración, distancias e instantáneas se guardan en `.mnet`; los costos y
+resultados se exportan en CSV y se incorporan al informe LaTeX. Consulte
+[`docs/fares.md`](docs/fares.md) para unidades, límites y comparación.
+
+En **Ayuda → Acerca de… → Contacto** encontrará el correo del autor,
+`prof.benite.gh@mail.com`, con opciones para copiarlo o abrir su aplicación de correo.
 
 ## Tecnología prevista
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
@@ -22,6 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from macronet.domain.fares import default_profile, sync_zones
 from macronet.domain.mode_choice import (
     ModeChoiceError,
     ModeChoiceResult,
@@ -30,6 +32,8 @@ from macronet.domain.mode_choice import (
 )
 from macronet.exporters import save_modal_csv
 from macronet.ui.calibration_widget import CalibrationPanel
+from macronet.ui.fares_dialog import FaresDialog
+from macronet.ui.fares_dialog import values as table_text
 
 EXAMPLE_NAMES = ("Centro", "Norte", "Sur", "Oriente")
 EXAMPLE_IMPEDANCES = (
@@ -55,6 +59,7 @@ class ModeChoiceWidget(QWidget):
     """Expone utilidades, probabilidades y matrices modales."""
 
     result_calculated = Signal(object)
+    fares_changed = Signal()
 
     MODE_HEADERS = (
         "Modo",
@@ -71,6 +76,8 @@ class ModeChoiceWidget(QWidget):
         self._trip_matrix = EXAMPLE_TRIPS
         self._impedance_matrix = EXAMPLE_IMPEDANCES
         self.current_result: ModeChoiceResult | None = None
+        self.fare_profiles = []
+        self.fare_scenarios = []
         self._modal_matrix_tables: list[QTableWidget] = []
         self._build_ui()
         self._restore_defaults()
@@ -108,6 +115,9 @@ class ModeChoiceWidget(QWidget):
         for spin in (self.time_coefficient_input, self.cost_coefficient_input):
             spin.valueChanged.connect(lambda _v: self.calibration.manual_edit("modal"))
         layout.addWidget(self.modes_table)
+        self.fares_button = QPushButton("Tarifas y costos de viaje…")
+        self.fares_button.clicked.connect(self._edit_fares)
+        layout.addWidget(self.fares_button)
 
         selector_group = QGroupBox("Par origen-destino para inspección")
         selector_layout = QGridLayout(selector_group)
@@ -154,7 +164,7 @@ class ModeChoiceWidget(QWidget):
         layout = QVBoxLayout(group)
         equations = QLabel(
             "<b>Atributos:</b> tₘᵢⱼ = tₘ⁰ + λₘcᵢⱼ; "
-            "Cₘᵢⱼ = Cₘ⁰ + γₘcᵢⱼ<br>"
+            "Cₘᵢⱼ = Cₘ⁰ + γₘcᵢⱼ (cálculo actual), o tarifa seleccionada<br>"
             "<b>Utilidad:</b> Uₘᵢⱼ = ASCₘ + β<sub>t</sub>tₘᵢⱼ + "
             "β<sub>c</sub>Cₘᵢⱼ<br>"
             "<b>Probabilidad:</b> Pₘᵢⱼ = exp(Uₘᵢⱼ) / Σₖexp(Uₖᵢⱼ); "
@@ -202,6 +212,9 @@ class ModeChoiceWidget(QWidget):
     def set_from_distribution(self, distribution_result: object) -> None:
         """Recibe la matriz OD y las impedancias calculadas en la etapa 2."""
 
+        self.fare_profiles = sync_zones(
+            self.fare_profiles, self._zone_names, distribution_result.zone_names
+        )
         self._zone_names = distribution_result.zone_names
         self._trip_matrix = distribution_result.trip_matrix
         self._impedance_matrix = distribution_result.impedance_matrix
@@ -218,6 +231,7 @@ class ModeChoiceWidget(QWidget):
                 modes,
                 self.time_coefficient_input.value(),
                 self.cost_coefficient_input.value(),
+                fare_profiles=self.fare_profiles,
             )
         except (ModeChoiceError, ValueError, AttributeError) as error:
             if raise_errors:
@@ -235,6 +249,42 @@ class ModeChoiceWidget(QWidget):
             f"Σ de participaciones = {sum(mode.share for mode in result.mode_summaries):.6f}."
         )
         self.result_calculated.emit(result)
+
+    def fare_snapshot(self, profiles=None):
+        return dict(
+            zone_names=list(self._zone_names),
+            trip_matrix=[list(r) for r in self._trip_matrix],
+            impedance_matrix=[list(r) for r in self._impedance_matrix],
+            modes=table_text(self.modes_table),
+            time_coefficient=self.time_coefficient_input.value(),
+            cost_coefficient=self.cost_coefficient_input.value(),
+            fare_profiles=copy.deepcopy(self.fare_profiles if profiles is None else profiles),
+        )
+
+    def _edit_fares(self):
+        try:
+            dialog = FaresDialog(self)
+        except ValueError as error:
+            QMessageBox.warning(self, "Revise los modos", str(error))
+            return
+        try:
+            if dialog.exec() != FaresDialog.DialogCode.Accepted:
+                return
+            profiles = dialog.profiles
+            if not self.fare_profiles and profiles == [
+                default_profile(self._zone_names) for _ in range(3)
+            ]:
+                profiles = []
+            changed = profiles != self.fare_profiles
+            scenarios_changed = dialog.scenarios != self.fare_scenarios
+            self.fare_profiles = copy.deepcopy(profiles)
+            self.fare_scenarios = copy.deepcopy(dialog.scenarios)
+            if changed or scenarios_changed:
+                self.fares_changed.emit()
+            if changed:
+                self.calculate()
+        finally:
+            dialog.deleteLater()
 
     def _export_modal_csv(self) -> None:
         if self.current_result is None:
@@ -255,6 +305,9 @@ class ModeChoiceWidget(QWidget):
         QMessageBox.information(self, "Exportación terminada", f"Matrices guardadas en:\n{path}")
 
     def _restore_defaults(self) -> None:
+        if self.fare_profiles:
+            self.fare_profiles = []
+            self.fares_changed.emit()
         self.time_coefficient_input.setValue(-0.08)
         self.cost_coefficient_input.setValue(-0.18)
         self.modes_table.setRowCount(len(DEFAULT_MODES))

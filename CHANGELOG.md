@@ -1,5 +1,25 @@
 # Bitácora de versiones — MacroNet Transport
 
+## 3.3.0 — 2026-10-28
+
+- Tarifas opcionales por modo en elección modal: plana, intervalos de distancia,
+  por kilómetro y mixta. El cálculo anterior se conserva como predeterminado.
+  Los esquemas activos sustituyen el costo monetario anterior sin doble cobro.
+- Matrices de distancias en km por modo, con procedencia explícita, captura,
+  plantilla e importación/exportación CSV; matrices de costos en MXN y vista previa.
+- Intervalos con límites crecientes, inclusión explícita del extremo superior y
+  último intervalo sin límite; validación de distancias, importes y cobertura.
+- Hasta 20 instantáneas tarifarias por ejercicio y comparación de participación
+  y viajes con la misma base. Se conserva el total OD; los contextos o distancias
+  diferentes no se presentan como efecto exclusivo de la tarifa.
+- Configuración e instantáneas guardadas en `.mnet`, CSV con costos/distancias y
+  detalle modal, e informe carta con reglas, matrices y comparación de escenarios.
+  Esquema de archivo 4, con lectura de esquemas 1, 2 y 3.
+- Ayuda → Acerca de con descripción, autoría, GPL-3.0-only y opción Contacto:
+  correo confirmado `prof.benite.gh@mail.com`, copia y apertura del cliente de correo.
+- Integración mediante un botón en elección modal y los diálogos necesarios;
+  se conserva la apariencia general, distribución, asignación y motor SUMO.
+
 ## 3.2.0 — 2026-10-24
 
 - Integración opcional de Eclipse SUMO después de la asignación, conservando

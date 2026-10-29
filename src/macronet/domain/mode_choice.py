@@ -6,6 +6,8 @@ from dataclasses import astuple, dataclass
 from math import exp, isfinite
 from typing import TypeAlias
 
+from macronet.domain.fares import FareDetails, resolve_fares
+
 Matrix: TypeAlias = tuple[tuple[float, ...], ...]
 
 
@@ -65,6 +67,7 @@ class ModeChoiceResult:
     od_results: tuple[tuple[OdModeChoiceResult, ...], ...]
     mode_summaries: tuple[ModeSummary, ...]
     total_trips: float
+    fare_details: tuple[FareDetails, ...] = ()
 
 
 def choose_modes(
@@ -74,6 +77,8 @@ def choose_modes(
     modes: list[ModeSpecification] | tuple[ModeSpecification, ...],
     time_coefficient: float,
     cost_coefficient: float,
+    *,
+    fare_profiles: list[dict] | None = None,
 ) -> ModeChoiceResult:
     """Divide cada celda OD entre modos mediante un logit multinomial.
 
@@ -83,6 +88,9 @@ def choose_modes(
     ``cost_mij = fixed_cost_m + variable_cost_m * c_ij``
     ``U_mij = ASC_m + beta_time * time_mij + beta_cost * cost_mij``
     ``P_mij = exp(U_mij) / sum_k(exp(U_kij))``
+
+    Un perfil tarifario activo sustituye ``cost_mij`` por su costo en MXN;
+    los esquemas por distancia usan una matriz independiente en km.
     """
 
     names = tuple(name.strip() for name in zone_names)
@@ -99,9 +107,8 @@ def choose_modes(
     )
 
     size = len(names)
-    modal_matrices = [
-        [[0.0 for _ in range(size)] for _ in range(size)] for _ in alternatives
-    ]
+    details = resolve_fares(fare_profiles, names, alternatives, impedances) if fare_profiles else ()
+    modal_matrices = [[[0.0 for _ in range(size)] for _ in range(size)] for _ in alternatives]
     od_rows: list[tuple[OdModeChoiceResult, ...]] = []
 
     for origin in range(size):
@@ -114,8 +121,9 @@ def choose_modes(
                     impedance,
                     time_coefficient,
                     cost_coefficient,
+                    details[k].costs[origin][destination] if details else None,
                 )
-                for mode in alternatives
+                for k, mode in enumerate(alternatives)
             )
             probabilities = _softmax(tuple(attribute[2] for attribute in attributes))
             choice_results: list[AlternativeChoiceResult] = []
@@ -155,6 +163,7 @@ def choose_modes(
         od_results=tuple(od_rows),
         mode_summaries=summaries,
         total_trips=total_trips,
+        fare_details=details if any(d.scheme != "legacy" for d in details) else (),
     )
 
 
@@ -163,9 +172,12 @@ def _calculate_attributes(
     impedance: float,
     time_coefficient: float,
     cost_coefficient: float,
+    monetary_override: float | None = None,
 ) -> tuple[float, float, float]:
     travel_time = mode.time_constant + mode.time_multiplier * impedance
     monetary_cost = mode.fixed_cost + mode.variable_cost * impedance
+    if monetary_override is not None:
+        monetary_cost = monetary_override
     utility = (
         mode.alternative_constant
         + time_coefficient * travel_time
