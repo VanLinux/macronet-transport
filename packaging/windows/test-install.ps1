@@ -28,11 +28,12 @@ if (-not $process.WaitForExit(180000)) {
     $process.Kill()
     throw 'La prueba del ejecutable excedió tres minutos'
 }
-if ($process.ExitCode -ne 0 -or -not (Test-Path $report)) { throw 'Falló la prueba del ejecutable instalado' }
+if (-not (Test-Path $report)) { throw "El ejecutable no produjo diagnóstico (código $($process.ExitCode))" }
 $result = Get-Content $report -Raw | ConvertFrom-Json
-if (-not $result.ok) { throw $result.error }
-if ($result.sumo_statistics.arrived -ne 19) { throw 'La simulación real no completó 19 viajes' }
 Write-Output (Get-Content $report -Raw)
+if (-not $result.ok) { throw $result.error }
+if ($process.ExitCode -ne 0) { throw "El ejecutable terminó con código $($process.ExitCode)" }
+if ($result.sumo_statistics.arrived -ne 19) { throw 'La simulación real no completó 19 viajes' }
 # El desinstalador debe conservar los trabajos fuera de la instalación.
 $uninstall = Join-Path $installDir 'unins000.exe'
 $process = Start-Process $uninstall -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru

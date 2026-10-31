@@ -108,8 +108,10 @@ def check_installation(parent):
         iterations=100,
         comparison=False,
     )
+    simulation_parent = parent / "Escenario México"
+    simulation_parent.mkdir(exist_ok=True)
     run = run_scenario(
-        parent,
+        simulation_parent,
         source,
         [Node("A", 0, 0), Node("B", 500, 0)],
         [Road("ab", 600, 36, 1), Road("ba", 600, 36, 1)],

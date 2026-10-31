@@ -31,7 +31,17 @@ def bundled_bin_directory():
     return None
 
 
-def _command_environment(executable):
+def _local_schema_home(home, directory):
+    """SUMO/Xerces en Windows necesita un SUMO_HOME sin caracteres no ASCII."""
+    # Una ruta relativa ASCII conserva la validación local y evita descargar XSD.
+    # Solo se copian los esquemas, no el motor, a la carpeta de esta ejecución.
+    resources = Path(directory) / "sumo-resources" / "data" / "xsd"
+    if not resources.is_dir():
+        shutil.copytree(Path(home) / "data" / "xsd", resources)
+    return "sumo-resources"
+
+
+def _command_environment(executable, directory=None):
     env = os.environ.copy()
     if getattr(sys, "frozen", False):
         bundle = Path(sys._MEIPASS).resolve()
@@ -51,7 +61,12 @@ def _command_environment(executable):
         env["PATH"] = str(executable.parent) + os.pathsep + env.get("PATH", "")
         # Las rutas de schemas y recursos corresponden al motor elegido.
         if (executable.parent.parent / "data").is_dir():
-            env["SUMO_HOME"] = str(executable.parent.parent)
+            home = executable.parent.parent
+            env["SUMO_HOME"] = (
+                _local_schema_home(home, directory)
+                if os.name == "nt" and not str(home).isascii() and directory is not None
+                else str(home)
+            )
     return env
 
 
@@ -131,7 +146,7 @@ def command(args, directory, log_name, cancel, deadline):
                     stdin=subprocess.DEVNULL,
                     stdout=log,
                     stderr=subprocess.STDOUT,
-                    env=_command_environment(args[0]),
+                    env=_command_environment(args[0], directory),
                     **options,
                 )
         except OSError as error:

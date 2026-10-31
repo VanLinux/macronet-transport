@@ -52,7 +52,7 @@ Excel/CSV/GraphML/LaTeX, `.mnet`, fuentes y una simulación real de 19 vehículo
 finalmente desinstala sin borrar el ejercicio de prueba.
 
 El artefacto `MacroNet-Windows-completo` contiene instalador y SHA256. Tras superar
-ambos trabajos desde `main`, el workflow publica una versión preliminar para
+ambos trabajos desde `main` o la rama de preparación, se publica una versión preliminar para
 la prueba docente. Los resultados de instalación incluyen JSON y una captura.
 
 ## Construcción manual en Windows
@@ -74,4 +74,9 @@ no descarga componentes en los equipos de los alumnos. SUMO conserva sus archivo
 oficiales. Python/Qt permanecen separados del motor nativo. Las licencias y el
 inventario se conservan en `licenses/`; `THIRD_PARTY.txt` indica las fuentes de los
 componentes y `sources/MacroNet-source.zip` contiene la fuente exacta de MacroNet.
+
+Cuando SUMO está instalado en una ruta con acentos, MacroNet copia sus esquemas
+XSD a la carpeta de ejecución y usa una ruta relativa ASCII para el proceso nativo.
+Así conserva la validación XML local sin depender de Internet ni de cambiar el
+nombre del usuario de Windows. Los resultados y sus nombres pueden conservar acentos.
 

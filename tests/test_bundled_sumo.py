@@ -60,3 +60,21 @@ def test_subprocess_has_private_resources_and_clean_library_path(tmp_path, monke
     if os.name != "nt":
         assert env["LD_LIBRARY_PATH"] == "/original"
     assert os.environ["SUMO_HOME"] == "external"
+
+
+def test_unicode_engine_uses_local_schemas_without_web_lookups(tmp_path):
+    home = tmp_path / "Héctor México" / "sumo"
+    xsd = home / "data" / "xsd"
+    xsd.mkdir(parents=True)
+    (xsd / "net_file.xsd").write_text('<schema name="network"/>')
+    (xsd / "common").mkdir()
+    (xsd / "common/types.xsd").write_text('<schema name="types"/>')
+    directory = tmp_path / "escenario"
+    directory.mkdir()
+    value = runner._local_schema_home(home, directory)
+    assert value.isascii() and not Path(value).is_absolute()
+    assert (directory / value / "data/xsd/net_file.xsd").read_bytes() == (
+        xsd / "net_file.xsd"
+    ).read_bytes()
+    assert (directory / value / "data/xsd/common/types.xsd").exists()
+    assert runner._local_schema_home(home, directory) == value

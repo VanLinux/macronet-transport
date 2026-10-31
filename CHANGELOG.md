@@ -10,6 +10,8 @@
   manual del motor y la ejecución desde código fuente en Linux y Windows.
 - Aislamiento de bibliotecas al ejecutar el motor nativo desde PyInstaller y
   manejo de entrada estándar para aplicaciones sin consola.
+- Compatibilidad con rutas de instalación con acentos: los esquemas de SUMO se
+  consultan con una ruta local relativa para evitar un fallo del lector XML nativo.
 - Construcción en GitHub Actions, prueba del ejecutable instalado con PATH
   aislado, escenario SUMO real de 19 vehículos, exportaciones, calibración,
   fuentes, persistencia, render de pestañas y comprobación de desinstalación.
