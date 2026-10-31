@@ -23,7 +23,7 @@ _internal/PySide6/. Puede sustituirlos por una compilación compatible con la mi
 ABI y reconstruir el ejecutable con la fuente y especificación incluidas.
 Se permite la ingeniería inversa necesaria para depurar esas modificaciones.
 Fuentes correspondientes de Qt y Qt for Python disponibles gratuitamente en:
-https://download.qt.io/official_releases/qt/6.11/6.11.2/submodules/
+https://download.qt.io/archive/qt/6.11/6.11.2/submodules/
 https://download.qt.io/official_releases/QtForPython/pyside6/PySide6-6.11.2-src/
 
 NumPy, SciPy, pandas, NetworkX, Matplotlib, statsmodels, openpyxl y dependencias:
