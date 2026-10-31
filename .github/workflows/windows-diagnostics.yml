@@ -1,0 +1,49 @@
+name: Diagnóstico SUMO instalado
+on:
+  push:
+    branches: [build/windows-installer]
+    paths: ['.github/workflows/windows-diagnostics.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnose:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: MacroNet-Windows-completo
+          run-id: 41251676174
+          github-token: ${{ github.token }}
+          path: installer
+      - name: Aislar causa en motor nativo
+        shell: pwsh
+        run: |
+          $installDir = Join-Path $env:RUNNER_TEMP 'Prueba Héctor México\MacroNet Transport'
+          $installer = (Get-ChildItem installer/*.exe).FullName
+          Start-Process $installer -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$installDir`"") -Wait
+          '<nodes><node id="a" x="0" y="0"/><node id="b" x="500" y="0"/></nodes>' | Out-File nodes.xml -Encoding utf8
+          '<edges><edge id="ab" from="a" to="b" speed="10" numLanes="1" length="600"/></edges>' | Out-File edges.xml -Encoding utf8
+          $native = Join-Path $installDir 'sumo\bin\netconvert.exe'
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          $env:HTTP_PROXY = 'http://127.0.0.1:9'
+          $env:HTTPS_PROXY = 'http://127.0.0.1:9'
+          $env:SUMO_HOME = Join-Path $installDir 'sumo'
+          Write-Output 'Unicode SUMO_HOME, validación normal'
+          & $native --node-files nodes.xml --edge-files edges.xml --output-file network.xml
+          Write-Output "exit=$LASTEXITCODE"
+          Write-Output 'Unicode SUMO_HOME, validación never'
+          & $native --node-files nodes.xml --edge-files edges.xml --output-file network.xml --xml-validation never
+          Write-Output "exit=$LASTEXITCODE"
+          Write-Output 'ASCII SUMO_HOME, binario en ruta Unicode'
+          $ascii = Join-Path $env:RUNNER_TEMP 'sumo-ascii'
+          Copy-Item (Join-Path $installDir 'sumo') $ascii -Recurse
+          $env:SUMO_HOME = $ascii
+          & $native --node-files nodes.xml --edge-files edges.xml --output-file network.xml
+          Write-Output "exit=$LASTEXITCODE"
+          Write-Output 'ASCII SUMO_HOME y binario ASCII'
+          & (Join-Path $ascii 'bin\netconvert.exe') --node-files nodes.xml --edge-files edges.xml --output-file network.xml
+          Write-Output "exit=$LASTEXITCODE"
+          exit 0
