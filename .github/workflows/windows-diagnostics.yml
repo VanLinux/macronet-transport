@@ -46,4 +46,19 @@ jobs:
           Write-Output 'ASCII SUMO_HOME y binario ASCII'
           & (Join-Path $ascii 'bin\netconvert.exe') --node-files nodes.xml --edge-files edges.xml --output-file network.xml
           Write-Output "exit=$LASTEXITCODE"
+          Write-Output 'Esquemas locales con SUMO_HOME relativo ASCII'
+          $schema = Join-Path (Get-Location) 'sumo-resources\data\xsd'
+          New-Item -ItemType Directory -Force -Path (Split-Path $schema) | Out-Null
+          Copy-Item (Join-Path $ascii 'data\xsd') $schema -Recurse
+          $env:SUMO_HOME = 'sumo-resources'
+          & $native --node-files nodes.xml --edge-files edges.xml --output-file network.xml
+          Write-Output "exit=$LASTEXITCODE"
+          Write-Output 'Esquemas locales y escenario con cwd Unicode'
+          $workUnicode = Join-Path $env:RUNNER_TEMP 'Escenario México'
+          New-Item -ItemType Directory -Force -Path $workUnicode | Out-Null
+          Copy-Item nodes.xml,edges.xml,sumo-resources $workUnicode -Recurse
+          Push-Location $workUnicode
+          & $native --node-files nodes.xml --edge-files edges.xml --output-file network.xml
+          Write-Output "exit=$LASTEXITCODE"
+          Pop-Location
           exit 0
