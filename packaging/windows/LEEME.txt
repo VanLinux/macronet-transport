@@ -1,0 +1,25 @@
+MacroNet Transport para Windows 11 (64 bits)
+Autor: Héctor Alonso Benítez García
+Contacto: prof.benitezgh@gmail.com
+
+Este instalador incluye Python, las bibliotecas de MacroNet y Eclipse SUMO.
+No necesitas instalar otros programas ni utilizar la terminal.
+Después de instalar, abre MacroNet Transport desde el escritorio o Inicio.
+La instalación y el uso del programa funcionan sin conexión a Internet.
+
+En Microsimulación SUMO deja vacía la carpeta del motor y pulsa Comprobar SUMO.
+MacroNet detectará el motor incluido. Una carpeta elegida manualmente tiene prioridad.
+Los escenarios y sus resultados se guardan en la carpeta que elijas al ejecutar.
+
+Para continuar un trabajo, usa Archivo > Guardar ejercicio y conserva el .mnet.
+Los informes se exportan como .tex: súbelos a Overleaf para obtener el PDF.
+No se incluye un compilador de LaTeX.
+
+Puedes desinstalar MacroNet desde Configuración > Aplicaciones de Windows.
+La desinstalación conserva los ejercicios y resultados guardados fuera de la carpeta
+de instalación. Guarda tus trabajos en Documentos, nunca dentro de la instalación.
+
+Las licencias y versiones de los componentes están en la carpeta licenses.
+El código de esta versión de MacroNet está en sources/MacroNet-source.zip.
+No hay activación ni licencia de pago. MacroNet se distribuye bajo GPL-3.0-only.
+

@@ -1,5 +1,25 @@
 # Bitácora de versiones — MacroNet Transport
 
+## 3.3.1 — 2026-10-31
+
+- Instalador completo para Windows x64 con Python, bibliotecas, fuentes y la
+  distribución oficial de Eclipse SUMO 1.28.0, verificada mediante SHA256.
+- Instalación por usuario, acceso directo al escritorio y menú Inicio,
+  desinstalador y carpeta de trabajo inicial en Documentos/MacroNet.
+- Detección automática prioritaria del SUMO incluido; se conserva la selección
+  manual del motor y la ejecución desde código fuente en Linux y Windows.
+- Aislamiento de bibliotecas al ejecutar el motor nativo desde PyInstaller y
+  manejo de entrada estándar para aplicaciones sin consola.
+- Compatibilidad con rutas de instalación con acentos: los esquemas de SUMO se
+  consultan con una ruta local relativa para evitar un fallo del lector XML nativo.
+- Construcción en GitHub Actions, prueba del ejecutable instalado con PATH
+  aislado, escenario SUMO real de 19 vehículos, exportaciones, calibración,
+  fuentes, persistencia, render de pestañas y comprobación de desinstalación.
+- Incluye licencias, inventario de componentes y fuente exacta de MacroNet.
+  Los informes siguen exportándose en `.tex` para compilar en Overleaf.
+- Distribución inicial para prueba docente; la verificación visual final en
+  Windows 11 se realiza antes de compartirla con los estudiantes.
+
 ## 3.3.0 — 2026-10-28
 
 - Tarifas opcionales por modo en elección modal: plana, intervalos de distancia,
@@ -114,3 +134,4 @@ Entrega solicitada como versión 3.0; sucede directamente a 0.2.0.
 La bitácora histórica compartida por el desarrollador conserva el detalle
 documental de conversaciones y decisiones anteriores. Esta bitácora registra
 las versiones del repositorio y no atribuye implementación a propuestas futuras.
+

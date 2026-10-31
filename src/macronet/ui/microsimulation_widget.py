@@ -121,7 +121,9 @@ class MicrosimulationWidget(QWidget):
         motor_layout = QHBoxLayout(motor)
         self.bin_directory = QLineEdit()
         self.bin_directory.setPlaceholderText("Carpeta bin de SUMO (vacío = detección automática)")
-        self.bin_directory.setToolTip("Se busca en el entorno Python, SUMO_HOME/bin y PATH.")
+        self.bin_directory.setToolTip(
+            "Detección automática: SUMO incluido, entorno Python, SUMO_HOME/bin y PATH."
+        )
         motor_layout.addWidget(self.bin_directory, 1)
         self.choose_bin = QPushButton("Buscar carpeta…")
         self.choose_bin.clicked.connect(self._choose_bin)
@@ -599,3 +601,4 @@ class MicrosimulationWidget(QWidget):
                     "El ejercicio conserva los indicadores. "
                     "La carpeta externa no está en este equipo.",
                 )
+

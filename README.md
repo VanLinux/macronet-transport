@@ -6,7 +6,7 @@ El proyecto busca que el estudiante pueda observar el proceso completo, modifica
 
 ## Alcance actual
 
-La versión `3.3.0` (familia **3.x**) incluye:
+La versión `3.3.1` (familia **3.x**) incluye:
 
 1. Generación y atracción de viajes.
 2. Distribución de viajes.
@@ -137,6 +137,22 @@ de un ejercicio no ejecuta SUMO. La guía, supuestos y límites están en
 
 ## Ejecución durante el desarrollo
 
+### Windows: instalador completo para estudiantes
+
+En [Releases](https://github.com/VanLinux/macronet-transport/releases) se publica
+el instalador de prueba de Windows 11 x64, una vez superada la construcción y
+verificación automática. Descargue el archivo `MacroNet-Transport-3.3.1-Windows-x64-Setup.exe`,
+ábralo y siga el asistente. El acceso directo inicia MacroNet sin terminal.
+Incluye Python, sus bibliotecas y Eclipse SUMO 1.28.0; no necesita instalaciones
+adicionales ni Internet para calcular. SUMO se detecta dentro de MacroNet aunque
+ya exista otro motor en el equipo. No se modifica el PATH del sistema.
+
+Los informes `.tex` pueden compilarse en Overleaf; no se incluye LaTeX.
+La primera distribución no está firmada digitalmente y está destinada a prueba
+docente antes de compartirla con el grupo. Véase [la guía de Windows](docs/windows-installer.md).
+
+### Desde el código fuente (Linux o Windows)
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate
@@ -176,3 +192,4 @@ La distribución del mismo caso se documenta en [`docs/examples/distribution-fou
 La elección modal se desarrolla en [`docs/examples/mode-choice-four-zones.md`](docs/examples/mode-choice-four-zones.md).
 
 La asignación de la demanda de automóvil se documenta en [`docs/examples/all-or-nothing-four-zones.md`](docs/examples/all-or-nothing-four-zones.md).
+

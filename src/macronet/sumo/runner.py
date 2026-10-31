@@ -12,14 +12,86 @@ import subprocess
 import sys
 import tempfile
 import time
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from threading import Event
+from threading import Event, Lock
 from xml.etree import ElementTree as ET
 
 from macronet.sumo.scenario import SumoCancelled, SumoError, prepare_scenario, write_json
 
 TOOLS = ("sumo", "netconvert", "duarouter")
+_DLL_LOCK = Lock()
+
+
+def bundled_bin_directory():
+    """SUMO privado junto al ejecutable, independiente del PATH y de SUMO_HOME."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent / "sumo" / "bin"
+    return None
+
+
+def _local_schema_home(home, directory):
+    """SUMO/Xerces en Windows necesita un SUMO_HOME sin caracteres no ASCII."""
+    # Una ruta relativa ASCII conserva la validación local y evita descargar XSD.
+    # Solo se copian los esquemas, no el motor, a la carpeta de esta ejecución.
+    resources = Path(directory) / "sumo-resources" / "data" / "xsd"
+    if not resources.is_dir():
+        shutil.copytree(Path(home) / "data" / "xsd", resources)
+    return "sumo-resources"
+
+
+def _command_environment(executable, directory=None):
+    env = os.environ.copy()
+    if getattr(sys, "frozen", False):
+        bundle = Path(sys._MEIPASS).resolve()
+        env["PATH"] = os.pathsep.join(
+            part
+            for part in env.get("PATH", "").split(os.pathsep)
+            if part and not Path(part).resolve().is_relative_to(bundle)
+        )
+        if os.name != "nt":
+            original = env.pop("LD_LIBRARY_PATH_ORIG", None)
+            if original is None:
+                env.pop("LD_LIBRARY_PATH", None)
+            else:
+                env["LD_LIBRARY_PATH"] = original
+    executable = Path(executable).resolve()
+    if executable.stem in TOOLS:
+        env["PATH"] = str(executable.parent) + os.pathsep + env.get("PATH", "")
+        # Las rutas de schemas y recursos corresponden al motor elegido.
+        if (executable.parent.parent / "data").is_dir():
+            home = executable.parent.parent
+            env["SUMO_HOME"] = (
+                _local_schema_home(home, directory)
+                if os.name == "nt" and not str(home).isascii() and directory is not None
+                else str(home)
+            )
+    return env
+
+
+@contextmanager
+def _native_dll_search():
+    """Evita que el motor C++ cargue DLL de Qt/Python del paquete congelado."""
+    if os.name != "nt" or not getattr(sys, "frozen", False):
+        yield
+        return
+    import ctypes
+
+    with _DLL_LOCK:
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.SetDllDirectoryW.argtypes = [ctypes.c_wchar_p]
+        kernel.SetDllDirectoryW.restype = ctypes.c_int
+        kernel.GetDllDirectoryW.argtypes = [ctypes.c_uint, ctypes.c_wchar_p]
+        kernel.GetDllDirectoryW.restype = ctypes.c_uint
+        previous = ctypes.create_unicode_buffer(32768)
+        kernel.GetDllDirectoryW(len(previous), previous)
+        if not kernel.SetDllDirectoryW(None):
+            raise ctypes.WinError(ctypes.get_last_error())
+        try:
+            yield
+        finally:
+            kernel.SetDllDirectoryW(previous.value or None)
 
 
 def stop_process(process):
@@ -29,7 +101,14 @@ def stop_process(process):
     try:
         if os.name == "nt":
             subprocess.run(
-                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                [
+                    str(Path(os.environ["SystemRoot"]) / "System32" / "taskkill.exe"),
+                    "/PID",
+                    str(process.pid),
+                    "/T",
+                    "/F",
+                ],
+                stdin=subprocess.DEVNULL,
                 capture_output=True,
                 timeout=5,
                 check=False,
@@ -60,13 +139,16 @@ def command(args, directory, log_name, cancel, deadline):
     log_path = Path(directory) / log_name
     with log_path.open("w", encoding="utf-8") as log:
         try:
-            process = subprocess.Popen(
-                [str(arg) for arg in args],
-                cwd=directory,
-                stdout=log,
-                stderr=subprocess.STDOUT,
-                **options,
-            )
+            with _native_dll_search():
+                process = subprocess.Popen(
+                    [str(arg) for arg in args],
+                    cwd=directory,
+                    stdin=subprocess.DEVNULL,
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                    env=_command_environment(args[0], directory),
+                    **options,
+                )
         except OSError as error:
             raise SumoError(f"No se pudo ejecutar {Path(args[0]).name}: {error}") from error
         try:
@@ -96,8 +178,9 @@ def detect_tools(bin_directory="", *, cancel=None, deadline=None):
         [Path(bin_directory)]
         if bin_directory
         else [
+            *([bundled_bin_directory()] if bundled_bin_directory() is not None else []),
             Path(sys.executable).parent,
-            Path(os.environ["SUMO_HOME"]) / "bin" if os.environ.get("SUMO_HOME") else None,
+            *([Path(os.environ["SUMO_HOME"]) / "bin"] if os.environ.get("SUMO_HOME") else []),
             None,
         ]
     )
