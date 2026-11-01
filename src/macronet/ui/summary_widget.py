@@ -5,8 +5,12 @@ from __future__ import annotations
 from html import escape
 from pathlib import Path
 
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+from matplotlib.figure import Figure
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import (
+    QApplication,
     QFileDialog,
     QGroupBox,
     QHeaderView,
@@ -25,6 +29,16 @@ from macronet.domain.distribution import DistributionResult
 from macronet.domain.generation import GenerationResult
 from macronet.domain.mode_choice import ModeChoiceResult
 from macronet.exporters import save_summary_tex
+from macronet.ui.appearance import AdaptiveCanvas, style_figure
+
+
+class SummaryCanvas(AdaptiveCanvas):
+    """La paleta de la aplicación determina el contraste del resumen."""
+
+    def draw(self, *args, **kwargs):
+        dark = QApplication.palette().color(QPalette.ColorRole.Window).lightness() < 128
+        style_figure(self, dark)
+        return FigureCanvasQTAgg.draw(self, *args, **kwargs)
 
 
 class SummaryWidget(QWidget):
@@ -78,8 +92,13 @@ class SummaryWidget(QWidget):
         self.mode_table = QTableWidget(0, 3)
         self.mode_table.setHorizontalHeaderLabels(("Modo", "Viajes", "Participación"))
         self.mode_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.mode_table.setMaximumHeight(150)
+        self.mode_table.setMaximumHeight(190)
         mode_layout.addWidget(self.mode_table)
+        self.mode_leading = QLabel("Sin resultados.")
+        mode_layout.addWidget(self.mode_leading)
+        self.mode_chart = SummaryCanvas(Figure(figsize=(6, 2.4)))
+        self.mode_chart.setVisible(False)
+        mode_layout.addWidget(self.mode_chart)
         layout.addWidget(mode_group)
 
         assignment_group = QGroupBox("4. Asignación")
@@ -87,7 +106,18 @@ class SummaryWidget(QWidget):
         self.assignment_label = QLabel("Sin resultados.")
         self.assignment_label.setWordWrap(True)
         assignment_layout.addWidget(self.assignment_label)
+        self.congestion_chart = SummaryCanvas(Figure(figsize=(6, 2.4)))
+        self.congestion_chart.setVisible(False)
+        assignment_layout.addWidget(self.congestion_chart)
         layout.addWidget(assignment_group)
+
+        self.sumo_group = QGroupBox("Microsimulación SUMO")
+        sumo_layout = QVBoxLayout(self.sumo_group)
+        self.sumo_label = QLabel()
+        self.sumo_label.setWordWrap(True)
+        sumo_layout.addWidget(self.sumo_label)
+        self.sumo_group.setVisible(False)
+        layout.addWidget(self.sumo_group)
 
         self.export_button = QPushButton("Descargar informe (.tex)")
         self.export_button.setEnabled(False)
@@ -98,6 +128,7 @@ class SummaryWidget(QWidget):
     def set_from_generation(self, result: GenerationResult) -> None:
         self.generation_result = result
         self.generation_label.setText(
+            f"<b>Zonas:</b> {len(result.zones)} &nbsp; · &nbsp; "
             f"<b>Viajes producidos:</b> {result.total_productions:,.2f} &nbsp; · &nbsp; "
             f"<b>Atracciones iniciales:</b> {result.total_attractions_raw:,.2f} &nbsp; · "
             f"&nbsp; <b>Factor de balanceo:</b> {result.balance_factor:.4f} &nbsp; · &nbsp; "
@@ -126,8 +157,26 @@ class SummaryWidget(QWidget):
             )
         self._set_table_row(
             len(result.mode_summaries),
-            ("Total", f"{result.total_trips:,.2f}", "100.00%"),
+            ("Total", f"{result.total_trips:,.2f}", "100.00%" if result.total_trips else "—"),
         )
+        if result.total_trips > 0:
+            maximum = max(mode.share for mode in result.mode_summaries)
+            leaders = [
+                escape(mode.mode_name) for mode in result.mode_summaries if mode.share == maximum
+            ]
+            self.mode_leading.setText("<b>Modo predominante:</b> " + ", ".join(leaders))
+            self.mode_chart.figure.clear()
+            axes = self.mode_chart.figure.subplots()
+            axes.barh([m.mode_name for m in result.mode_summaries],
+                      [100 * m.share for m in result.mode_summaries], color="#888888")
+            axes.set_xlabel("Participación (%)")
+            axes.invert_yaxis()
+            self.mode_chart.figure.tight_layout()
+            self.mode_chart.setVisible(True)
+            self.mode_chart.draw_idle()
+        else:
+            self.mode_leading.setText("Modo predominante: no definido (demanda nula).")
+            self.mode_chart.setVisible(False)
         self._update_export_state()
 
     def set_from_assignment(
@@ -138,10 +187,14 @@ class SummaryWidget(QWidget):
         self.comparison_result = comparison
         critical = max(result.link_results, key=lambda item: item.volume_capacity_ratio)
         overloaded = sum(item.volume_capacity_ratio > 1.0 for item in result.link_results)
+        mean_time = (
+            f"{result.mean_travel_time:.2f} min" if result.assigned_demand else "no disponible"
+        )
         self.assignment_label.setText(
             f"<b>Modo asignado:</b> {escape(mode_name)} &nbsp; · &nbsp; "
             f"<b>Demanda interzonal:</b> {result.assigned_demand:,.2f} &nbsp; · &nbsp; "
-            f"<b>Demanda intrazonal:</b> {result.intrazonal_demand:,.2f}<br>"
+            f"<b>Demanda intrazonal:</b> {result.intrazonal_demand:,.2f} &nbsp; · &nbsp; "
+            f"<b>Tiempo medio interzonal:</b> {mean_time}<br>"
             f"<b>Arco crítico:</b> {escape(critical.link.link_id)} "
             f"({escape(critical.link.tail)} → {escape(critical.link.head)}) &nbsp; · &nbsp; "
             f"<b>Máximo v/c:</b> {critical.volume_capacity_ratio:.3f} &nbsp; · &nbsp; "
@@ -149,12 +202,50 @@ class SummaryWidget(QWidget):
             + (
                 f"<b>Wardrop UE:</b> {'convergió' if result.converged else 'no convergió'}; "
                 f"brecha {result.relative_gap:.4%}; {len(result.history) - 1} actualizaciones. "
-                f"Tiempo total {result.total_travel_time:.2f} veh·min."
+                f"Tiempo total {result.total_travel_time:.2f} demanda·min."
                 if result.method == "ue"
                 else "<b>Todo-o-Nada:</b> ejecución directa con tiempos libres."
             )
         )
+        self.congestion_chart.figure.clear()
+        axes = self.congestion_chart.figure.subplots()
+        levels = (sum(item.volume_capacity_ratio <= 0.8 for item in result.link_results),
+                  sum(0.8 < item.volume_capacity_ratio <= 1 for item in result.link_results),
+                  overloaded)
+        axes.barh(("v/c ≤ 0.8", "0.8 < v/c ≤ 1", "v/c > 1"), levels, color="#888888")
+        axes.set_title("Congestión de la red")
+        axes.set_xlabel("Número de arcos")
+        axes.invert_yaxis()
+        self.congestion_chart.figure.tight_layout()
+        self.congestion_chart.setVisible(True)
+        self.congestion_chart.draw_idle()
         self._update_export_state()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.refresh_sumo()
+
+    def refresh_sumo(self):
+        state = self.microsimulation_provider() or {}
+        run = state.get("last_run") or {}
+        if run.get("status") != "completed":
+            self.sumo_group.setVisible(False)
+            return
+        stats = run["statistics"]
+        def value(key):
+            item = stats.get(key)
+            return f"{item:.2f} s" if item is not None else "sin llegadas"
+        self.sumo_label.setText(
+            ("<b>Resultado anterior: los datos cambiaron.</b><br>" if state.get("stale") else "")
+            + f"<b>Insertados:</b> {stats['inserted']} · <b>Recorridos completos:</b> "
+            f"{stats['arrived']} · <b>En red:</b> {stats['running']} · "
+            f"<b>Pendientes:</b> {stats['pending']}<br>"
+            f"<b>Tiempo medio:</b> {value('mean_duration_s')} · "
+            f"<b>Espera media:</b> {value('mean_waiting_s')} · "
+            f"<b>Pérdida media de tiempo:</b> {value('mean_time_loss_s')} "
+            "(promedios de recorridos completados)."
+        )
+        self.sumo_group.setVisible(True)
 
     @staticmethod
     def _set_item(table: QTableWidget, row: int, column: int, text: str) -> None:

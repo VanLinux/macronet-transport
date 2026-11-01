@@ -6,7 +6,7 @@ El proyecto busca que el estudiante pueda observar el proceso completo, modifica
 
 ## Alcance actual
 
-La versión `3.3.1` (familia **3.x**) incluye:
+La versión `3.3.2` (familia **3.x**) incluye:
 
 1. Generación y atracción de viajes.
 2. Distribución de viajes.
@@ -17,7 +17,8 @@ La versión `3.3.1` (familia **3.x**) incluye:
 También permite guardar y reabrir ejercicios completos en `.mnet`, exportar la matriz
 origen-destino y las matrices de los tres modos en CSV, la red asignada en GraphML
 y un informe ampliado en LaTeX con el nombre del usuario. El informe se configura
-en tamaño carta y no utiliza `fontenc`. La red GraphML conserva dirección, tiempos de flujo
+en tamaño carta y no utiliza `fontenc`. Incluye gráficas autocontenidas con PGFPlots
+y matrices en anexos; puede compilarse con `pdflatex` u Overleaf. La red GraphML conserva dirección, tiempos de flujo
 libre, capacidades, flujos y relaciones volumen/capacidad para su análisis en Gephi.
 
 Cada módulo deberá separar el modelo matemático de la interfaz gráfica y conservar resultados intermedios para su explicación y validación manual.
@@ -143,6 +144,8 @@ En [Releases](https://github.com/VanLinux/macronet-transport/releases) se public
 el instalador de prueba de Windows 11 x64, una vez superada la construcción y
 verificación automática. Descargue el archivo `MacroNet-Transport-3.3.1-Windows-x64-Setup.exe`,
 ábralo y siga el asistente. El acceso directo inicia MacroNet sin terminal.
+El instalador corresponde a la versión 3.3.1; la actualización 3.3.2 aún no
+se distribuye para Windows.
 Incluye Python, sus bibliotecas y Eclipse SUMO 1.28.0; no necesita instalaciones
 adicionales ni Internet para calcular. SUMO se detecta dentro de MacroNet aunque
 ya exista otro motor en el equipo. No se modifica el PATH del sistema.

@@ -129,6 +129,49 @@ def test_contact_uses_confirmed_address_and_only_opens_mail_client(window, monke
     dialog.deleteLater()
 
 
+def test_summary_displays_indicators_and_labels_old_sumo_results(window):
+    summary = window.centralWidget().widget(5)
+    assert "Zonas:" in summary.generation_label.text()
+    assert "Modo predominante:" in summary.mode_leading.text()
+    assert "Tiempo medio interzonal:" in summary.assignment_label.text()
+    assert not summary.mode_chart.isHidden()
+    assert not summary.congestion_chart.isHidden()
+    summary.microsimulation_provider = lambda: {
+        "stale": True,
+        "last_run": {
+            "status": "completed",
+            "statistics": {
+                "inserted": 10,
+                "arrived": 8,
+                "running": 1,
+                "pending": 1,
+                "mean_duration_s": 60.0,
+                "mean_waiting_s": None,
+                "mean_time_loss_s": 12.0,
+            },
+        },
+    }
+    summary.refresh_sumo()
+    assert not summary.sumo_group.isHidden()
+    assert "Resultado anterior" in summary.sumo_label.text()
+    assert "60.00 s" in summary.sumo_label.text()
+    assert "sin llegadas" in summary.sumo_label.text()
+    summary.microsimulation_provider = lambda: {"last_run": {"status": "prepared"}}
+    summary.refresh_sumo()
+    assert summary.sumo_group.isHidden()
+
+
+def test_summary_charts_follow_light_and_dark_appearance(window):
+    summary = window.centralWidget().widget(5)
+    for theme, expected in (("dark", 0.2), ("light", 0.9)):
+        window.appearance.set_mode(theme)
+        for chart in (summary.mode_chart, summary.congestion_chart):
+            chart.draw()
+            red, green, blue, _ = chart.figure.get_facecolor()
+            assert (red < expected) if theme == "dark" else (red > expected)
+            assert red == pytest.approx(green) == pytest.approx(blue)
+
+
 def test_saving_only_scenarios_does_not_recalculate_or_change_current_parameters(
     window, monkeypatch
 ):
