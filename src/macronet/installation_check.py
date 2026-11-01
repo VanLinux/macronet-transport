@@ -92,7 +92,11 @@ def check_installation(parent):
         raise RuntimeError("El informe instalado no contiene las mejoras de la versión actual.")
     if tex.count(r"\begin{tikzpicture}") < 2 or r"\includegraphics" in tex:
         raise RuntimeError("El informe debe incluir sus gráficas sin archivos externos.")
-    if not summary.export_button.isEnabled() or summary.mode_table.rowCount() != 3:
+    mode_names = [mode.mode_name for mode in modal.current_result.mode_summaries]
+    displayed_names = [
+        summary.mode_table.item(row, 0).text() for row in range(summary.mode_table.rowCount())
+    ]
+    if not summary.export_button.isEnabled() or displayed_names != [*mode_names, "Total"]:
         raise RuntimeError("El Resumen no recibió los resultados de las cuatro etapas.")
     tabs.setCurrentIndex(5)
     app.processEvents()
