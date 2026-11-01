@@ -1,5 +1,14 @@
 # Bitácora de versiones — MacroNet Transport
 
+## 3.3.2 — 2026-10-31
+
+- Resumen de las cuatro etapas con indicadores, participación modal, congestión
+  por relación volumen/capacidad y resultados SUMO cuando estén disponibles.
+- Informe LaTeX ampliado con parámetros, ecuaciones, gráficas autocontenidas,
+  conclusiones numéricas y anexos con matrices OD y variables de entrada.
+- Se conservan los modelos de cálculo y la compatibilidad de los ejercicios.
+  La distribución de esta actualización para Windows queda pendiente.
+
 ## 3.3.1 — 2026-10-31
 
 - Instalador completo para Windows x64 con Python, bibliotecas, fuentes y la

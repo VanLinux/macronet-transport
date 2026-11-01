@@ -312,9 +312,11 @@ class ExerciseTabs(QTabWidget):
         summary_widget.metadata_provider = self._report_metadata
         summary_widget.fare_scenarios_provider = lambda: mode_choice_widget.fare_scenarios
         summary_widget.microsimulation_provider = self.microsimulation.state
+        self.microsimulation.changed.connect(summary_widget.refresh_sumo)
         self.microsimulation.sync_geometry()
         for widget in (*self.stages.values(), summary_widget, self.microsimulation):
             make_scrollable(widget)
+        summary_widget.mode_table.setColumnWidth(0, 220)
 
     def _sumo_source(self):
         source = self.calculated_states["assignment"]

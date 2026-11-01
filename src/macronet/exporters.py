@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import csv
 import json
+from datetime import date
 from io import StringIO
 from pathlib import Path
 
 import networkx as nx
 
+from macronet import __version__
 from macronet.domain.assignment import AssignmentResult
 from macronet.domain.distribution import DistributionResult
 from macronet.domain.fare_scenarios import compare_scenarios, evaluate_snapshot
@@ -296,14 +298,19 @@ def build_summary_tex(
         r"\usepackage[utf8]{inputenc}",
         r"\usepackage{amsmath}",
         r"\usepackage{booktabs}",
+        r"\usepackage{longtable}",
+        r"\usepackage{pgfplots}",
+        r"\pgfplotsset{compat=1.18}",
         r"\usepackage[letterpaper,margin=2.5cm]{geometry}",
-        r"\title{Resumen del modelo de cuatro etapas}",
+        r"\title{Informe técnico del modelo de cuatro etapas}",
         r"\author{Usuario: "
         + _latex_escape(analyst_name.strip())
-        + r"\\MacroNet Transport\\Desarrollador: Héctor Benítez García}",
-        r"\date{\today}",
+        + r"\\MacroNet Transport " + __version__ + r"\\Desarrollador: Héctor Benítez García}",
+        r"\date{" + date.today().strftime("%d/%m/%Y") + "}",
         r"\begin{document}",
+        r"\begin{titlepage}",
         r"\maketitle",
+        r"\end{titlepage}",
         r"\section{Generación y atracción}",
         (
             "El sistema produjo "
@@ -312,24 +319,35 @@ def build_summary_tex(
             f"$F={generation.balance_factor:.6f}$ hasta "
             f"{generation.total_attractions_balanced:.2f} viajes."
         ),
-        r"\begin{center}",
-        r"\begin{tabular}{lrrr}",
+        r"\begin{longtable}{p{.25\linewidth}rrr}",
         r"\toprule",
         r"Zona & Producción $P_i$ & Atracción $A_i$ & Balanceada $A_i^*$ \\",
-        r"\midrule",
+        r"\midrule\endhead",
     ]
-    if mode_choice.fare_details or fare_scenarios:
-        lines.insert(lines.index(r"\begin{document}"), r"\usepackage{longtable}")
     for item in generation.zones:
         lines.append(
             f"{_latex_escape(item.zone.name)} & {item.production:.2f} & "
             f"{item.attraction_raw:.2f} & {item.attraction_balanced:.2f} \\\\"
         )
+    if calibration and calibration.get("generation"):
+        gen = calibration["generation"]
+        production = r"b_0+b_H H_i+b_V V_i"
+        attraction = r"a_0+a_E E_i+a_S S_i"
+        if gen.get("production_model", "ols") != "ols":
+            production = r"\exp(" + production + ")"
+        if gen.get("attraction_model", "ols") != "ols":
+            attraction = r"\exp(" + attraction + ")"
+        lines.insert(
+            lines.index(r"\begin{longtable}{p{.25\linewidth}rrr}"),
+            "$P_i=" + production + r"$; $A_i=" + attraction
+            + r"$; $A_i^*=F A_i$, $F=\sum_i P_i/\sum_i A_i$. "
+            r"Si ambas sumas son cero, se toma $F=1$. "
+            "Los coeficientes aplicados aparecen en la sección de parámetros.",
+        )
     lines.extend(
         [
             r"\bottomrule",
-            r"\end{tabular}",
-            r"\end{center}",
+            r"\end{longtable}",
             r"\section{Distribución}",
             (
                 "El modelo gravitacional doblemente restringido "
@@ -338,6 +356,13 @@ def build_summary_tex(
                 f"{distribution.maximum_error:.6g} viajes. La matriz OD conserva "
                 f"{sum(distribution.row_totals):.2f} viajes."
             ),
+            "Función de fricción: "
+            + {"exponential": "exponencial", "power": "potencia",
+               "combined": "combinada"}[distribution.friction_function]
+            + (f"; $\\alpha={distribution.alpha:.6g}$"
+               if distribution.friction_function != "exponential" else "")
+            + (f"; $\\beta={distribution.beta:.6g}$"
+               if distribution.friction_function != "power" else "") + ".",
             r"\section{Elección modal}",
             r"\begin{center}",
             r"\begin{tabular}{lrr}",
@@ -346,6 +371,21 @@ def build_summary_tex(
             r"\midrule",
         ]
     )
+    # Las gráficas son código PGFPlots: el archivo .tex no depende de imágenes externas.
+    generation_plot = _generation_plot_tex(generation)
+    section_index = lines.index(r"\section{Distribución}")
+    lines[section_index:section_index] = generation_plot
+    distribution_index = lines.index(r"\section{Distribución}") + 1
+    lines[distribution_index:distribution_index] = [
+        r"$T_{ij}=a_i b_j P_i A_j^* f(c_{ij})$, con balanceo iterativo de Furness.",
+        "La matriz OD y sus marginales se presentan en los anexos.",
+    ]
+    mode_index = lines.index(r"\section{Elección modal}") + 1
+    lines[mode_index:mode_index] = [
+        r"$V_{ij}^{m}=ASC_m+\beta_t T_{ij}^{m}+\beta_c C_{ij}^{m}$; "
+        r"$P_{ij}^{m}=e^{V_{ij}^{m}}/\sum_k e^{V_{ij}^{k}}$.",
+        "Las matrices OD por modo se presentan en los anexos.",
+    ]
     for mode in mode_choice.mode_summaries:
         lines.append(
             f"{_latex_escape(mode.mode_name)} & {mode.total_trips:.2f} & "
@@ -365,26 +405,32 @@ def build_summary_tex(
                 f"fueron interzonales y {assignment.intrazonal_demand:.2f}, intrazonales."
             ),
             (
+                f"Tiempo medio interzonal: {assignment.mean_travel_time:.4f} min. "
+                f"Tiempo total: {assignment.total_travel_time:.4f} demanda·min."
+                if assignment.assigned_demand else "Tiempo medio interzonal: no disponible."
+            ),
+            (
                 f"El arco crítico fue {_latex_escape(critical_link.link.link_id)} "
                 f"({_latex_escape(critical_link.link.tail)} $\\rightarrow$ "
                 f"{_latex_escape(critical_link.link.head)}), con "
                 f"$v/c={critical_link.volume_capacity_ratio:.3f}$. Se identificaron "
                 f"{overloaded} arcos con $v/c>1$."
             ),
-            r"\begin{center}",
-            r"\begin{tabular}{lrrrr}",
+            r"\begin{longtable}{p{.20\linewidth}rrrr}",
             r"\toprule",
-            r"Arco & Tiempo & Capacidad & Flujo & $v/c$ \\",
-            r"\midrule",
+            r"Arco & Tiempo (min) & Capacidad & Flujo & $v/c$ \\",
+            r"\midrule\endhead",
         ]
     )
+    assignment_index = lines.index(r"\section{Asignación}")
+    lines[assignment_index:assignment_index] = _mode_plot_tex(mode_choice)
     for item in assignment.link_results:
         lines.append(
             f"{_latex_escape(item.link.link_id)} & {item.travel_time:.2f} & "
             f"{item.link.capacity:.2f} & {item.volume:.2f} & "
             f"{item.volume_capacity_ratio:.3f} \\\\"
         )
-    lines.extend([r"\bottomrule", r"\end{tabular}", r"\end{center}"])
+    lines.extend([r"\bottomrule", r"\end{longtable}"])
     if assignment.method == "ue":
         lines.extend(
             [
@@ -399,18 +445,19 @@ def build_summary_tex(
                 r"$y$ es la carga de caminos mínimos con los tiempos actuales. "
                 "Demanda interzonal nula: brecha cero. Las rutas mínimas finales son referencias, "
                 "no un reparto de demanda por ruta.",
-                f"Tiempo total: {assignment.total_travel_time:.4f} veh$\\cdot$min. "
+                f"Tiempo total: {assignment.total_travel_time:.4f} demanda$\\cdot$min. "
                 f"Tiempo medio interzonal: {assignment.mean_travel_time:.4f} min.",
             ]
         )
+        lines.extend(_convergence_plot_tex(assignment))
     if comparison:
         lines.extend(
             [
                 r"\subsection{Comparación sobre la misma OD y red}",
                 "AON elige rutas con tiempos libres; ambos flujos se evalúan con la misma BPR.",
-                r"\begin{center}\begin{tabular}{lrrrr}\toprule",
+                r"\begin{longtable}{p{.20\linewidth}rrrr}\toprule",
                 r"Arco & Flujo AON & Flujo UE & $t$ AON & $t$ UE \\",
-                r"\midrule",
+                r"\midrule\endhead",
             ]
         )
         for a, u in zip(comparison[0].link_results, comparison[1].link_results, strict=True):
@@ -419,15 +466,56 @@ def build_summary_tex(
                 f"{a.travel_time:.3f} & {u.travel_time:.3f} \\\\"
             )
         lines.extend(
-            [r"\bottomrule\end{tabular}\end{center}", "UE no equivale al óptimo del sistema."]
+            [r"\bottomrule\end{longtable}", "UE no equivale al óptimo del sistema."]
         )
     if calibration:
-        lines.append(r"\section{Parámetros y calibración por etapa}")
+        has_calibration = any(
+            state.get("calibration", {}).get("applied")
+            for state in calibration.values() if isinstance(state, dict)
+        )
+        lines.append(
+            r"\section{Parámetros y calibración por etapa}" if has_calibration
+            else r"\section{Parámetros utilizados por etapa}"
+        )
         _append_parameters_tex(lines, calibration)
     if mode_choice.fare_details or fare_scenarios:
         _append_fares_tex(lines, mode_choice, fare_scenarios or [])
     if microsimulation and microsimulation.get("last_run"):
         _append_sumo_tex(lines, microsimulation)
+    lines.extend([
+        r"\section{Conclusiones numéricas}",
+        r"\begin{center}\begin{tabular}{lr}\toprule",
+        r"Indicador & Resultado \\",
+        r"\midrule",
+        f"Zonas & {len(generation.zones)} " + r"\\",
+        f"Producción total (viajes) & {generation.total_productions:.2f} " + r"\\",
+        f"Viajes distribuidos & {sum(distribution.row_totals):.2f} " + r"\\",
+        f"Demanda interzonal asignada & {assignment.assigned_demand:.2f} " + r"\\",
+        (f"Tiempo medio interzonal (min) & {assignment.mean_travel_time:.2f} "
+         if assignment.assigned_demand else "Tiempo medio interzonal (min) & --- ") + r"\\",
+        f"Máxima relación $v/c$ & {critical_link.volume_capacity_ratio:.3f} " + r"\\",
+        r"\bottomrule\end{tabular}\end{center}",
+    ])
+    if mode_choice.total_trips:
+        top_share = max(mode.share for mode in mode_choice.mode_summaries)
+        leaders = ", ".join(
+            _latex_escape(mode.mode_name)
+            for mode in mode_choice.mode_summaries if mode.share == top_share
+        )
+        lines.append(f"Modo predominante: {leaders} ({100 * top_share:.2f}\\%). ")
+    else:
+        lines.append("Modo predominante: no definido por demanda nula. ")
+    lines.append(
+        "Convergencia de distribución: "
+        + ("alcanzada" if distribution.converged else "no alcanzada")
+        + f"; error máximo {distribution.maximum_error:.6g} viajes."
+    )
+    if assignment.method == "ue":
+        lines.append(
+            "Convergencia Wardrop: "
+            + ("alcanzada" if assignment.converged else "no alcanzada")
+            + f"; brecha relativa {assignment.relative_gap:.6g}."
+        )
     lines.extend(
         [
             r"\section{Alcance}",
@@ -437,11 +525,130 @@ def build_summary_tex(
                 "red dirigida válida y demanda/capacidades del mismo periodo. "
                 "Los parámetros de ejemplo no son calibraciones locales."
             ),
-            r"\end{document}",
-            "",
         ]
     )
+    lines.extend([
+        r"\appendix", r"\section{Matrices y datos de entrada}",
+        r"\subsection{Variables socioeconómicas por zona}",
+        r"\begin{longtable}{p{.23\linewidth}rrrr}\toprule",
+        r"Zona & Hogares & Vehículos & Empleos & Estudiantes \\",
+        r"\midrule\endhead",
+    ])
+    for item in generation.zones:
+        zone = item.zone
+        lines.append(
+            f"{_latex_escape(zone.name)} & {zone.households:.6g} & {zone.vehicles:.6g} & "
+            f"{zone.jobs:.6g} & {zone.students:.6g} " + r"\\"
+        )
+    lines.append(r"\bottomrule\end{longtable}")
+    lines.extend(_matrix_tex("Matriz OD distribuida", distribution.zone_names,
+                             distribution.trip_matrix))
+    lines.extend(_matrix_tex("Matriz de impedancias de distribución", distribution.zone_names,
+                             distribution.impedance_matrix, marginales=False))
+    if calibration and calibration.get("modal", {}).get("impedance_matrix"):
+        modal_impedance = calibration["modal"]["impedance_matrix"]
+        if modal_impedance != [list(row) for row in distribution.impedance_matrix]:
+            lines.extend(_matrix_tex(
+                "Matriz de impedancias para elección modal", mode_choice.zone_names,
+                modal_impedance, marginales=False,
+            ))
+    for mode in mode_choice.mode_summaries:
+        lines.extend(_matrix_tex("Matriz OD: " + mode.mode_name, mode_choice.zone_names,
+                                 mode.trip_matrix))
+    lines.extend([r"\end{document}", ""])
     return "\n".join(lines)
+
+
+def _generation_plot_tex(result):
+    if not result.zones or len(result.zones) > 15:
+        return []
+    productions = " ".join(f"({i},{item.production:.8g})" for i, item in enumerate(result.zones, 1))
+    attractions = " ".join(
+        f"({i},{item.attraction_balanced:.8g})" for i, item in enumerate(result.zones, 1)
+    )
+    return [
+        r"\begin{center}\begin{tikzpicture}",
+        r"\begin{axis}[ybar,bar width=5pt,width=.88\linewidth,height=5.5cm,"
+        r"xlabel={Zona (orden de la tabla)},ylabel={Viajes},ymin=0,xtick=data,"
+        r"legend style={at={(0.5,1.02)},anchor=south,legend columns=2,font=\small}]",
+        r"\addplot[fill=black!65] coordinates {" + productions + "};",
+        r"\addplot[fill=black!25] coordinates {" + attractions + "};",
+        r"\legend{Producción,Atracción balanceada}",
+        r"\end{axis}\end{tikzpicture}\end{center}",
+    ]
+
+
+def _mode_plot_tex(result):
+    if not result.total_trips or not result.mode_summaries:
+        return []
+    points = " ".join(
+        f"({i},{100 * mode.share:.8g})" for i, mode in enumerate(result.mode_summaries, 1)
+    )
+    return [
+        r"\begin{center}\begin{tikzpicture}",
+        r"\begin{axis}[ybar,width=.75\linewidth,height=5cm,ymin=0,ymax=100,"
+        r"xlabel={Modo (orden de la tabla)},ylabel={Participación (\%)},"
+        r"xtick=data,bar width=18pt]",
+        r"\addplot[fill=black!55] coordinates {" + points + "};",
+        r"\end{axis}\end{tikzpicture}\end{center}",
+    ]
+
+
+def _convergence_plot_tex(result):
+    if not result.history:
+        return []
+    # Una muestra conserva primera y última iteración en historiales muy extensos.
+    stride = max(1, (len(result.history) + 499) // 500)
+    sampled = list(result.history[::stride])
+    if sampled[-1] != result.history[-1]:
+        sampled.append(result.history[-1])
+    points = " ".join(f"({row.number},{100 * row.relative_gap:.8g})" for row in sampled)
+    return [
+        r"\begin{center}\begin{tikzpicture}",
+        r"\begin{axis}[width=.82\linewidth,height=5cm,xlabel={Actualización},"
+        r"ylabel={Brecha relativa (\%)},ymin=0]",
+        r"\addplot[black,thick] coordinates {" + points + "};",
+        r"\end{axis}\end{tikzpicture}\end{center}",
+        "La gráfica muestra hasta 501 puntos del historial, incluida la última actualización."
+        if stride > 1 else "",
+    ]
+
+
+def _matrix_tex(title, names, matrix, *, marginales=True):
+    """Bloques de cuatro destinos, con filas multipágina y nombres identificables."""
+    lines = [r"\subsection{" + _latex_escape(title) + "}"]
+    lines.append(
+        "Las columnas se identifican con el número de zona indicado a continuación; "
+        "el total de origen corresponde a todos los destinos."
+        if marginales else "Las columnas se identifican con el número de zona indicado."
+    )
+    for number, name in enumerate(names, 1):
+        lines.append(f"{number}: " + _latex_escape(name) + r".\quad ")
+    lines.append(r"\par")
+    for start in range(0, len(names), 4):
+        end = min(start + 4, len(names))
+        columns = "r" * (end - start + int(marginales))
+        lines.extend([
+            rf"\paragraph{{Destinos {start + 1}--{end}}}",
+            r"\begin{longtable}{p{.23\linewidth}" + columns + "}",
+            r"\toprule",
+            "Origen & " + " & ".join(str(i + 1) for i in range(start, end))
+            + (" & Total" if marginales else "") + r" \\",
+            r"\midrule\endhead",
+        ])
+        for name, row in zip(names, matrix, strict=True):
+            values = [f"{value:.6g}" for value in row[start:end]]
+            if marginales:
+                values.append(f"{sum(row):.6g}")
+            lines.append(_latex_escape(name) + " & " + " & ".join(values) + r" \\")
+        if marginales:
+            totals = [sum(row[i] for row in matrix) for i in range(start, end)]
+            lines.append(
+                r"\midrule Total destino & " + " & ".join(f"{value:.6g}" for value in totals)
+                + f" & {sum(map(sum, matrix)):.6g}" + r" \\"
+            )
+        lines.append(r"\bottomrule\end{longtable}")
+    return lines
 
 
 def _fare_description(lines, mode_name, detail):
@@ -602,14 +809,33 @@ def _append_sumo_tex(lines, state):
                 "Estos indicadores no certifican equilibrio dinámico ni calibración local.",
             ]
         )
+        if run.get("edges"):
+            lines.extend([
+                r"\subsection{Contraste con la asignación estática}",
+                "La referencia estática usa la misma demanda vehicular y tiempos libres "
+                "de la geometría. SUMO informa entradas y tiempos medidos por arco; "
+                "las diferencias no representan automáticamente una solución UE.",
+                r"\begin{longtable}{p{.25\linewidth}rrrr}\toprule",
+                r"Arco & Estático & $t$ estático & SUMO & $t$ SUMO \\",
+                r" & vehículos & min & entradas & min \\",
+                r"\midrule\endhead",
+            ])
+            for edge in run["edges"]:
+                sample = edge["sumo_time_min"]
+                lines.append(
+                    f"{_latex_escape(edge['link_id'])} & {edge['static_vehicles']:.3f} & "
+                    f"{edge['static_time_min']:.3f} & {edge['sumo_entered']} & "
+                    + (f"{sample:.3f}" if sample is not None else "---") + r" \\"
+                )
+            lines.append(r"\bottomrule\end{longtable}")
     else:
         lines.append("Escenario preparado sin ejecutar: no hay resultados de microsimulación.")
     lines.append(
         "Versión SUMO: "
         + _latex_escape(run.get("versions", {}).get("sumo", "sin ejecutar"))
-        + ". Huella de entradas: "
+        + r".\par Huella de entradas:\par\texttt{"
         + _latex_escape(run["fingerprint"])
-        + "."
+        + "}."
     )
 
 
@@ -647,10 +873,19 @@ def _append_parameters_tex(lines: list[str], states: dict) -> None:
         elif stage == "modal":
             values = {key: state[key] for key in ("time_coefficient", "cost_coefficient")}
             for i, row in enumerate(state["modes"], 1):
-                values[f"ASC_m{i} ({row[0]})"] = row[1]
+                for label, value in zip(
+                    ("ASC", "factor_tiempo", "tiempo_fijo", "costo_fijo", "costo_variable"),
+                    row[1:], strict=True,
+                ):
+                    values[f"{label}_m{i} ({row[0]})"] = value
             lines.append(
                 "Tiempo en min y costo en MXN para la calibración; "
                 "las unidades de los atributos deben corresponder a la aplicación."
+            )
+            lines.append(
+                r"$T_{ij}^m=t_{0m}+\lambda_m c_{ij}$; costo tradicional "
+                r"$C_{ij}^m=c_{0m}+r_m c_{ij}$. Un esquema tarifario activo "
+                "sustituye ese costo tradicional."
             )
         else:
             values = {"method": state.get("method", "aon")}

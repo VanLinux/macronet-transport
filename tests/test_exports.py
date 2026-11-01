@@ -6,6 +6,7 @@ from io import StringIO
 import networkx as nx
 import pytest
 
+from macronet import __version__
 from macronet.domain.assignment import Link, assign_all_or_nothing
 from macronet.domain.distribution import distribute_trips
 from macronet.domain.generation import GenerationCoefficients, ZoneInput, calculate_generation
@@ -133,6 +134,37 @@ def test_summary_tex_contains_all_four_stages() -> None:
     assert r"\usepackage[letterpaper,margin=2.5cm]{geometry}" in content
     assert "fontenc" not in content
     assert r"\end{document}" in content
+
+
+def test_report_contains_complete_matrices_and_inline_graphs() -> None:
+    generation, distribution, modal, assignment = _four_step_results()
+    content = build_summary_tex(
+        generation, distribution, modal, assignment, "Automóvil", "Héctor"
+    )
+    assert "MacroNet Transport " + __version__ in content
+    assert r"\section{Conclusiones numéricas}" in content
+    assert r"\subsection{Matriz OD distribuida}" in content
+    assert r"\subsection{Matriz de impedancias de distribución}" in content
+    for mode in modal.mode_summaries:
+        assert r"\subsection{Matriz OD: " + mode.mode_name + "}" in content
+        for row in mode.trip_matrix:
+            assert all(f"{value:.6g}" in content for value in row)
+    assert r"\begin{tikzpicture}" in content
+    assert r"\includegraphics" not in content
+    assert "Tarifas y costos de viaje" not in content
+    assert "Microsimulación opcional con SUMO" not in content
+
+
+def test_matrix_annex_splits_destinations_without_losing_marginals() -> None:
+    from macronet.exporters import _matrix_tex
+
+    names = tuple(f"Z{i}" for i in range(1, 7))
+    matrix = tuple(tuple(10 * i + j for j in range(1, 7)) for i in range(1, 7))
+    content = "\n".join(_matrix_tex("OD", names, matrix))
+    assert "Destinos 1--4" in content and "Destinos 5--6" in content
+    assert r"Z1 & 11 & 12 & 13 & 14 & 81 \\" in content
+    assert r"Z1 & 15 & 16 & 81 \\" in content
+    assert r"Total destino & 240 & 246 & 1386 \\" in content
 
 
 def test_modal_csv_preserves_all_matrices_and_totals(tmp_path) -> None:
