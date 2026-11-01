@@ -3,7 +3,7 @@ name: Instalador Windows completo
 on:
   workflow_dispatch:
   push:
-    branches: [main, build/windows-installer]
+    branches: [main, 'build/windows-*']
     paths:
       - 'src/**'
       - 'packaging/**'
@@ -93,7 +93,9 @@ jobs:
         shell: pwsh
         run: |
           $installer = (Get-ChildItem installer/*.exe).FullName
-          ./packaging/windows/test-install.ps1 -Installer $installer
+          $project = Get-Content pyproject.toml -Raw
+          $version = [regex]::Match($project, '(?m)^version = "([^"]+)"').Groups[1].Value
+          ./packaging/windows/test-install.ps1 -Installer $installer -ExpectedVersion $version
       - name: Conservar resultados de instalación
         if: always()
         uses: actions/upload-artifact@v4
@@ -103,9 +105,9 @@ jobs:
           if-no-files-found: ignore
 
   publish:
-    name: Publicar instalador para prueba docente
+    name: Publicar instalador completo
     needs: [build, installed-test]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/build/windows-installer')
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/build/windows-'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -120,11 +122,32 @@ jobs:
           script: |
             const fs = require('fs');
             const version = fs.readFileSync('pyproject.toml', 'utf8').match(/^version = "([^"]+)"/m)[1];
-            const tag = `windows-v${version}-preview.${context.runNumber}`;
+            const tag = `windows-v${version}`;
+            // Conserva un instalador ya publicado: nunca sustituir una versión silenciosamente.
+            let existing;
+            try {
+              existing = await github.rest.repos.getReleaseByTag({...context.repo, tag});
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            if (existing) {
+              const published = await github.rest.repos.getCommit({...context.repo, ref: tag});
+              const current = await github.rest.repos.getCommit({...context.repo, ref: context.sha});
+              if (published.data.commit.tree.sha !== current.data.commit.tree.sha) {
+                throw new Error(`La versión ${version} ya tiene otro código publicado. Use una versión nueva.`);
+              }
+              const names = existing.data.assets.map(asset => asset.name);
+              if (!names.includes(`MacroNet-Transport-${version}-Windows-x64-Setup.exe`) ||
+                  !names.includes('SHA256SUMS.txt')) {
+                throw new Error('La publicación existente está incompleta; no se sobrescribe automáticamente.');
+              }
+              core.summary.addLink('Instalador ya publicado', existing.data.html_url).write();
+              return;
+            }
             const release = await github.rest.repos.createRelease({
               ...context.repo, tag_name: tag, target_commitish: context.sha,
-              name: `MacroNet ${version} — Windows con SUMO (prueba)`, prerelease: true,
-              body: 'Instalador completo para Windows 11 x64. Incluye Python y Eclipse SUMO 1.28.0. No requiere comandos ni instalaciones adicionales. No incluye LaTeX: los informes .tex se pueden compilar en Overleaf. Instalación y simulación verificadas automáticamente con PATH aislado; pendiente la prueba docente en Windows 11. Descargue el archivo terminado en Setup.exe. Esta primera distribución no está firmada digitalmente.'
+              name: `MacroNet ${version} — Windows con SUMO`, prerelease: false,
+              body: `Instalador completo para Windows 11 x64. Incluye Python, bibliotecas y Eclipse SUMO 1.28.0. No requiere comandos ni instalaciones adicionales. Contiene el Resumen y el informe ampliado de la versión ${version}. No incluye LaTeX: los informes .tex se compilan en Overleaf. Se comprobaron automáticamente la versión del ejecutable, instalación, Resumen, exportación, simulación con el SUMO incluido y desinstalación con PATH aislado en Windows Server 2022. Falta la comprobación manual del docente en sus equipos Windows 11. Descargue el archivo terminado en Setup.exe. El instalador no está firmado digitalmente.`
             });
             for (const file of fs.readdirSync('installer')) {
               await github.rest.repos.uploadReleaseAsset({
@@ -133,4 +156,5 @@ jobs:
               });
             }
             core.summary.addLink('Descargar instalador', release.data.html_url).write();
+
 

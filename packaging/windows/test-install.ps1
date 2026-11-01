@@ -1,4 +1,7 @@
-param([Parameter(Mandatory=$true)][string]$Installer)
+param(
+    [Parameter(Mandatory=$true)][string]$Installer,
+    [Parameter(Mandatory=$true)][string]$ExpectedVersion
+)
 $ErrorActionPreference = 'Stop'
 $Installer = (Resolve-Path $Installer).Path
 $testRoot = Join-Path $env:RUNNER_TEMP 'Prueba Héctor México'
@@ -10,6 +13,9 @@ $process = Start-Process $Installer -ArgumentList @('/VERYSILENT', '/SUPPRESSMSG
 if ($process.ExitCode -ne 0) { throw "Instalación fallida: $($process.ExitCode)" }
 $exe = Join-Path $installDir 'MacroNet.exe'
 if (-not (Test-Path $exe)) { throw 'No se instaló MacroNet.exe' }
+if ((Get-Item $exe).VersionInfo.ProductVersion -ne $ExpectedVersion) {
+    throw "El ejecutable no corresponde a MacroNet $ExpectedVersion"
+}
 $shortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'MacroNet Transport.lnk'
 if (-not (Test-Path $shortcut)) { throw 'No se creó el acceso directo' }
 # Sin acceso a los Python/SUMO que pudiera tener la imagen de GitHub.
@@ -32,6 +38,10 @@ if (-not (Test-Path $report)) { throw "El ejecutable no produjo diagnóstico (c�
 $result = Get-Content $report -Raw | ConvertFrom-Json
 Write-Output (Get-Content $report -Raw)
 if (-not $result.ok) { throw $result.error }
+if ($result.version -ne $ExpectedVersion) { throw 'La versión interna no corresponde al instalador' }
+if ($result.checks -notcontains 'summary_and_self_contained_report') {
+    throw 'No se verificaron el Resumen y el nuevo informe'
+}
 if ($process.ExitCode -ne 0) { throw "El ejecutable terminó con código $($process.ExitCode)" }
 if ($result.sumo_statistics.arrived -ne 19) { throw 'La simulación real no completó 19 viajes' }
 # El desinstalador debe conservar los trabajos fuera de la instalación.
@@ -41,4 +51,5 @@ if ($process.ExitCode -ne 0) { throw 'Falló la desinstalación' }
 if (Test-Path $exe) { throw 'El ejecutable sigue instalado' }
 if (-not (Test-Path (Join-Path $reportDir 'Práctica México.mnet'))) { throw 'Se perdió el ejercicio del usuario' }
 if (Test-Path $shortcut) { throw 'El acceso directo no se retiró' }
+
 

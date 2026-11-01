@@ -6,8 +6,11 @@
   por relación volumen/capacidad y resultados SUMO cuando estén disponibles.
 - Informe LaTeX ampliado con parámetros, ecuaciones, gráficas autocontenidas,
   conclusiones numéricas y anexos con matrices OD y variables de entrada.
+- Instalador completo para Windows x64 de la misma versión 3.3.2, con Python,
+  bibliotecas y SUMO 1.28.0 incluidos; informes `.tex` para Overleaf, sin LaTeX.
+- Comprobación del número de versión del ejecutable instalado, del Resumen y
+  de la exportación real del informe con gráficas autocontenidas y matrices.
 - Se conservan los modelos de cálculo y la compatibilidad de los ejercicios.
-  La distribución de esta actualización para Windows queda pendiente.
 
 ## 3.3.1 — 2026-10-31
 
@@ -143,4 +146,5 @@ Entrega solicitada como versión 3.0; sucede directamente a 0.2.0.
 La bitácora histórica compartida por el desarrollador conserva el detalle
 documental de conversaciones y decisiones anteriores. Esta bitácora registra
 las versiones del repositorio y no atribuye implementación a propuestas futuras.
+
 

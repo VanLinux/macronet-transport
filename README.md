@@ -141,18 +141,18 @@ de un ejercicio no ejecuta SUMO. La guía, supuestos y límites están en
 ### Windows: instalador completo para estudiantes
 
 En [Releases](https://github.com/VanLinux/macronet-transport/releases) se publica
-el instalador de prueba de Windows 11 x64, una vez superada la construcción y
-verificación automática. Descargue el archivo `MacroNet-Transport-3.3.1-Windows-x64-Setup.exe`,
+el instalador completo de Windows 11 x64, una vez superada la construcción y
+verificación automática. Descargue el archivo `MacroNet-Transport-3.3.2-Windows-x64-Setup.exe`,
 ábralo y siga el asistente. El acceso directo inicia MacroNet sin terminal.
-El instalador corresponde a la versión 3.3.1; la actualización 3.3.2 aún no
-se distribuye para Windows.
+El instalador corresponde a la versión 3.3.2 e incluye el Resumen actualizado
+y el informe ampliado con gráficas autocontenidas y matrices en anexos.
 Incluye Python, sus bibliotecas y Eclipse SUMO 1.28.0; no necesita instalaciones
 adicionales ni Internet para calcular. SUMO se detecta dentro de MacroNet aunque
 ya exista otro motor en el equipo. No se modifica el PATH del sistema.
 
 Los informes `.tex` pueden compilarse en Overleaf; no se incluye LaTeX.
-La primera distribución no está firmada digitalmente y está destinada a prueba
-docente antes de compartirla con el grupo. Véase [la guía de Windows](docs/windows-installer.md).
+El instalador no está firmado digitalmente. Se recomienda comprobarlo en el equipo
+docente antes de compartirlo con el grupo. Véase [la guía de Windows](docs/windows-installer.md).
 
 ### Desde el código fuente (Linux o Windows)
 
@@ -195,4 +195,5 @@ La distribución del mismo caso se documenta en [`docs/examples/distribution-fou
 La elección modal se desarrolla en [`docs/examples/mode-choice-four-zones.md`](docs/examples/mode-choice-four-zones.md).
 
 La asignación de la demanda de automóvil se documenta en [`docs/examples/all-or-nothing-four-zones.md`](docs/examples/all-or-nothing-four-zones.md).
+
 

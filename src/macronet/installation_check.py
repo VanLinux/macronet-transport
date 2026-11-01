@@ -9,12 +9,12 @@ from pathlib import Path
 def check_installation(parent):
     import numpy as np
     import pandas as pd
-    from PySide6.QtWidgets import QApplication, QMessageBox
+    from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMessageBox
 
     from macronet import __version__
     from macronet.application import MainWindow
     from macronet.domain.calibration import fit_generation
-    from macronet.exporters import build_summary_tex, save_assignment_graphml, save_od_csv
+    from macronet.exporters import save_assignment_graphml, save_od_csv
     from macronet.project import load_project
     from macronet.sumo.runner import bundled_bin_directory, detect_tools, run_scenario
     from macronet.sumo.scenario import Node, Road, Settings
@@ -64,15 +64,40 @@ def check_installation(parent):
         assignment.current_result.zone_names,
         assignment.assigned_mode_name,
     )
-    tex = build_summary_tex(
-        generation.current_result,
-        distribution.current_result,
-        modal.current_result,
-        assignment.current_result,
-        assignment.assigned_mode_name,
-        "Prueba de instalación",
+    # Verifica el mismo recorrido de exportación que utiliza el alumno en Resumen.
+    summary = tabs.widget(5)
+    report_path = parent / "informe.tex"
+    original_text = QInputDialog.getText
+    original_filename = QFileDialog.getSaveFileName
+    original_information = QMessageBox.information
+    try:
+        QInputDialog.getText = lambda *_a, **_k: ("Prueba de instalación", True)
+        QFileDialog.getSaveFileName = lambda *_a, **_k: (str(report_path), "")
+        QMessageBox.information = lambda *_a, **_k: None
+        summary._export_tex()
+    finally:
+        QInputDialog.getText = original_text
+        QFileDialog.getSaveFileName = original_filename
+        QMessageBox.information = original_information
+    tex = report_path.read_text(encoding="utf-8")
+    required = (
+        "MacroNet Transport " + __version__,
+        r"\usepackage{pgfplots}",
+        r"\section{Conclusiones numéricas}",
+        r"\section{Matrices y datos de entrada}",
+        r"\subsection{Matriz OD distribuida}",
+        r"\subsection{Matriz de impedancias de distribución}",
     )
-    (parent / "informe.tex").write_text(tex, encoding="utf-8")
+    if not all(text in tex for text in required):
+        raise RuntimeError("El informe instalado no contiene las mejoras de la versión actual.")
+    if tex.count(r"\begin{tikzpicture}") < 2 or r"\includegraphics" in tex:
+        raise RuntimeError("El informe debe incluir sus gráficas sin archivos externos.")
+    if not summary.export_button.isEnabled() or summary.mode_table.rowCount() != 3:
+        raise RuntimeError("El Resumen no recibió los resultados de las cuatro etapas.")
+    tabs.setCurrentIndex(5)
+    app.processEvents()
+    window.grab().save(str(parent / "resumen.png"))
+    result["checks"].append("summary_and_self_contained_report")
     frame = pd.DataFrame({"zona": ["México", "Norte"], "viajes": [12, 7]})
     frame.to_excel(parent / "datos.xlsx", index=False)
     if not pd.read_excel(parent / "datos.xlsx").equals(frame):
@@ -131,3 +156,4 @@ def check_installation(parent):
     window.close()
     app.processEvents()
     return result
+

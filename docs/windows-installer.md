@@ -2,7 +2,7 @@
 
 ## Para estudiantes
 
-1. Descargue el archivo terminado en `Windows-x64-Setup.exe` desde Releases.
+1. Descargue `MacroNet-Transport-3.3.2-Windows-x64-Setup.exe` desde Releases.
 2. Ejecútelo y siga el asistente. La instalación se realiza para su usuario.
 3. Abra **MacroNet Transport** desde el escritorio o Inicio.
 
@@ -17,7 +17,7 @@ Los informes `.tex` se suben a Overleaf para obtener PDF. No se incluye LaTeX.
 Desinstale desde Configuración → Aplicaciones; los trabajos guardados fuera de
 la carpeta de instalación se conservan.
 
-## Primera prueba docente en Windows 11
+## Comprobación docente en Windows 11
 
 La compilación y las pruebas automáticas se ejecutan en Windows Server 2022 x64.
 Esta comprobación no sustituye la prueba final en un equipo Windows 11.
@@ -32,7 +32,7 @@ Esta comprobación no sustituye la prueba final en un equipo Windows 11.
 - Revisar textos, gráficas y diálogos con la escala habitual de pantalla del
   equipo, y verificar el acceso directo y la desinstalación.
 
-Esta primera distribución no está firmada digitalmente. Si Windows muestra un
+El instalador no está firmado digitalmente. Si Windows muestra un
 aviso, compruebe su procedencia y el SHA256 publicado; no desactive el antivirus.
 
 ## Construcción desde Fedora o Linux
@@ -40,20 +40,23 @@ aviso, compruebe su procedencia y el SHA256 publicado; no desactive el antivirus
 El código y la configuración se editan en Linux. El workflow
 `.github/workflows/windows-installer.yml` construye el ejecutable en Windows,
 sin necesitar un Windows local para la compilación. Se ejecuta al cambiar código
-o configuración en `main`, en la rama de preparación `build/windows-installer`,
+o configuración en `main`, en las ramas de preparación `build/windows-*`,
 o manualmente desde Actions.
 
 El proceso verifica el código, descarga el ZIP oficial de SUMO 1.28.0 con su hash
 fijado, congela Python con PyInstaller y genera el asistente con Inno Setup.
 Otro runner instala el resultado en una ruta con espacios y acentos, elimina del
 PATH el acceso a Python y SUMO externos y ejecuta el modo de comprobación del
-binario instalado. La prueba verifica Qt, cuatro etapas, Wardrop, calibración,
+binario instalado. La prueba verifica la versión interna y de Windows, Qt, cuatro
+etapas, Wardrop, calibración, el Resumen y la exportación real de su informe ampliado,
 Excel/CSV/GraphML/LaTeX, `.mnet`, fuentes y una simulación real de 19 vehículos;
 finalmente desinstala sin borrar el ejercicio de prueba.
 
 El artefacto `MacroNet-Windows-completo` contiene instalador y SHA256. Tras superar
-ambos trabajos desde `main` o la rama de preparación, se publica una versión preliminar para
-la prueba docente. Los resultados de instalación incluyen JSON y una captura.
+ambos trabajos desde `main` o una rama de preparación, se publica la versión
+`windows-v3.3.2`. Los resultados incluyen JSON y capturas del Resumen y la aplicación.
+Una publicación existente con el mismo código y archivos se conserva; el proceso
+rechaza sustituirla por otro código con el mismo número de versión.
 
 ## Construcción manual en Windows
 
@@ -66,7 +69,7 @@ py -3.12 -m venv .venv-build
 .\.venv-build\Scripts\python.exe packaging/windows/prepare.py
 .\.venv-build\Scripts\python.exe -m PyInstaller --clean --noconfirm packaging/windows/macronet.spec
 .\.venv-build\Scripts\python.exe packaging/windows/prepare.py --stage
-& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=3.3.1 packaging/windows/installer.iss
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=3.3.2 packaging/windows/installer.iss
 ```
 
 El resultado está en `dist/installer/`. El instalador copia el paquete completo;
@@ -79,4 +82,5 @@ Cuando SUMO está instalado en una ruta con acentos, MacroNet copia sus esquemas
 XSD a la carpeta de ejecución y usa una ruta relativa ASCII para el proceso nativo.
 Así conserva la validación XML local sin depender de Internet ni de cambiar el
 nombre del usuario de Windows. Los resultados y sus nombres pueden conservar acentos.
+
 
