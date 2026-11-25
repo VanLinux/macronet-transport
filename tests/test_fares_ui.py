@@ -25,6 +25,7 @@ def window(monkeypatch):
     monkeypatch.setattr(QMessageBox, "warning", lambda *a: pytest.fail(str(a[-1])))
     monkeypatch.setattr(QMessageBox, "question", lambda *a: QMessageBox.StandardButton.Discard)
     window = MainWindow()
+    assert window._load_demonstration()
     yield window
     window._dirty = False
     window.close()

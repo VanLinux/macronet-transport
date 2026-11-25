@@ -39,6 +39,7 @@ class GenerationWidget(QWidget):
     """Permite modificar y observar el cálculo de la primera etapa."""
 
     result_calculated = Signal(object)
+    inputs_changed = Signal()
 
     INPUT_COLUMN_COUNT = 5
     HEADERS = (
@@ -59,7 +60,7 @@ class GenerationWidget(QWidget):
         self.production_model = "ols"
         self.attraction_model = "ols"
         self._build_ui()
-        self._load_example()
+        self.table.setMinimumHeight(150)
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -99,9 +100,12 @@ class GenerationWidget(QWidget):
         calculate_button.clicked.connect(self.calculate)
         buttons.addWidget(calculate_button)
 
-        restore_button = QPushButton("Restaurar caso didáctico")
-        restore_button.clicked.connect(self._load_example)
-        buttons.addWidget(restore_button)
+        add_zone = QPushButton("Agregar zona")
+        add_zone.clicked.connect(self._add_zone)
+        buttons.addWidget(add_zone)
+        remove_zone = QPushButton("Quitar zona seleccionada")
+        remove_zone.clicked.connect(self._remove_zone)
+        buttons.addWidget(remove_zone)
 
         buttons.addStretch()
         layout.addLayout(buttons)
@@ -154,7 +158,23 @@ class GenerationWidget(QWidget):
         spin.setValue(value)
         return spin
 
-    def _load_example(self) -> None:
+    def _add_zone(self) -> None:
+        row = self.table.rowCount()
+        if row >= 100:
+            return
+        self.table.insertRow(row)
+        for column in range(self.INPUT_COLUMN_COUNT):
+            self.table.setItem(row, column, QTableWidgetItem(""))
+        self.table.setCurrentCell(row, 0)
+        self.table.editItem(self.table.item(row, 0))
+
+    def _remove_zone(self) -> None:
+        row = self.table.currentRow()
+        if row >= 0:
+            self.table.removeRow(row)
+            self.inputs_changed.emit()
+
+    def load_example(self) -> None:
         self.production_model = self.attraction_model = "ols"
         self.calibration.manual_edit()
         defaults = GenerationCoefficients()

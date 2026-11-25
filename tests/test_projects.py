@@ -23,6 +23,7 @@ def window(monkeypatch, qt_app):
     monkeypatch.setattr(QMessageBox, "warning", lambda *a: pytest.fail(str(a)))
     monkeypatch.setattr(QMessageBox, "critical", lambda *a: pytest.fail(str(a)))
     window = MainWindow()
+    assert window._load_demonstration()
     yield window
     window._dirty = False
     window.close()

@@ -33,6 +33,7 @@ def window(monkeypatch):
     monkeypatch.setattr(QMessageBox, "question", lambda *a: QMessageBox.StandardButton.Discard)
     monkeypatch.setattr(QMessageBox, "warning", lambda *a: pytest.fail(str(a[-1])))
     window = MainWindow()
+    assert window._load_demonstration()
     yield window
     panel = window.centralWidget().microsimulation
     if panel.is_running:

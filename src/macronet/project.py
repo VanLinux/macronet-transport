@@ -15,6 +15,7 @@ from macronet.domain.generation import GenerationCoefficients
 from macronet.sumo.scenario import validate_saved_state
 
 FORMAT_VERSION = 4
+PARTIAL_FORMAT_VERSION = 5
 STAGES = ("generation", "distribution", "modal", "assignment")
 MAX_PROJECT_BYTES = 10 * 1024 * 1024
 
@@ -32,34 +33,30 @@ def validate_project(document: object) -> None:
         1,
         2,
         3,
-        4,
+        FORMAT_VERSION,
+        PARTIAL_FORMAT_VERSION,
     ):
         raise ProjectError("Versión de archivo .mnet incompatible. Actualice MacroNet.")
     try:
         _safe_tree(document)
         _text(document["analyst_name"])
-        for section in ("draft", "calculated"):
-            states = document[section]
-            if set(states) != set(STAGES):
-                raise ValueError("Faltan etapas del ejercicio.")
-            for stage in STAGES:
-                _validate_state(stage, states[stage])
+        partial = document["format_version"] == PARTIAL_FORMAT_VERSION
         sizes = []
         for section in ("draft", "calculated"):
             states = document[section]
-            sizes.extend(
-                (
-                    len(states["generation"]["table"]),
-                    len(states["distribution"]["marginals"]),
-                    len(states["modal"]["zone_names"]),
-                    len(states["assignment"]["zone_names"]),
-                )
-            )
-        if len(set(sizes)) != 1:
+            if not isinstance(states, dict) or not set(states) <= set(STAGES):
+                raise ValueError("Etapas del ejercicio inválidas.")
+            if (section == "draft" or not partial) and set(states) != set(STAGES):
+                raise ValueError("Faltan etapas del ejercicio.")
+            for stage, state in states.items():
+                _validate_state(stage, state, draft=partial and section == "draft")
+                sizes.append(_zone_count(stage, state))
+        if not partial and len(set(sizes)) != 1:
             raise ValueError("Las etapas tienen diferentes dimensiones de zonas.")
         view = document["view"]
         _number(view["tab"], 0, 6 if document["format_version"] >= 3 else 5, integer=True)
-        _number(view["od"], 0, sizes[0] ** 2 - 1, integer=True)
+        modal_zones = len(document["draft"]["modal"]["zone_names"])
+        _number(view["od"], -1 if partial else 0, max(-1, modal_zones**2 - 1), integer=True)
         if "microsimulation" in document:
             validate_saved_state(document["microsimulation"])
             last_run = document["microsimulation"]["last_run"]
@@ -84,11 +81,16 @@ def validate_project(document: object) -> None:
         ) from error
 
 
-def _validate_state(stage: str, state: dict) -> None:
+def _zone_count(stage: str, state: dict) -> int:
+    key = {"generation": "table", "distribution": "marginals"}.get(stage, "zone_names")
+    return len(state[key])
+
+
+def _validate_state(stage: str, state: dict, *, draft: bool = False) -> None:
     if "calibration" in state:
         _calibration(state["calibration"])
     if stage == "generation":
-        _table(state["table"], 5)
+        _table(state["table"], 5, allow_empty=draft)
         names = GenerationCoefficients.__dataclass_fields__
         if set(state["coefficients"]) != set(names):
             raise ValueError("Coeficientes de generación incompletos.")
@@ -98,8 +100,8 @@ def _validate_state(stage: str, state: dict) -> None:
             if state.get(key, "ols") not in ("ols", "poisson", "negative_binomial"):
                 raise ValueError("Modelo de generación inválido.")
     elif stage == "distribution":
-        size = _table(state["marginals"], 3)
-        _table(state["costs"], size, rows=size)
+        size = _table(state["marginals"], 3, allow_empty=draft)
+        _table(state["costs"], size, rows=size, allow_empty=draft)
         _number(state["beta"], 0, 100)
         _number(state["tolerance"], 0.000001, 1)
         _number(state["iterations"], 1, 10_000, integer=True)
@@ -117,7 +119,7 @@ def _validate_state(stage: str, state: dict) -> None:
             raise ValueError("La función avanzada de distribución no está habilitada.")
     else:
         names = state["zone_names"]
-        if not isinstance(names, list) or not 1 <= len(names) <= 100:
+        if not isinstance(names, list) or not (0 if draft else 1) <= len(names) <= 100:
             raise ValueError("Dimensiones de zonas inválidas.")
         for name in names:
             _text(name)
@@ -129,11 +131,11 @@ def _validate_state(stage: str, state: dict) -> None:
             _matrix(state["trip_matrix"], len(names))
             _matrix(state["impedance_matrix"], len(names))
         else:
-            _table(state["centroids"], 2, rows=len(names))
-            _table(state["links"], 5, max_rows=10_000)
+            _table(state["centroids"], 2, rows=len(names), allow_empty=draft)
+            _table(state["links"], 5, max_rows=10_000, allow_empty=draft)
             _matrix(state["demand_matrix"], len(names))
             _text(state["mode_name"])
-            _number(state["mode_index"], 0, 2, integer=True)
+            _number(state["mode_index"], -1 if draft else 0, 2, integer=True)
             if state.get("method", "aon") not in ("aon", "ue"):
                 raise ValueError("Método de asignación inválido.")
             for key, default, lower, upper in (
@@ -241,8 +243,11 @@ def _number(value: object, minimum: float, maximum: float, *, integer: bool = Fa
         raise ValueError("Número fuera de rango.")
 
 
-def _table(value: object, columns: int, *, rows: int | None = None, max_rows: int = 100) -> int:
-    if not isinstance(value, list) or not 1 <= len(value) <= max_rows:
+def _table(
+    value: object, columns: int, *, rows: int | None = None, max_rows: int = 100,
+    allow_empty: bool = False,
+) -> int:
+    if not isinstance(value, list) or not (0 if allow_empty else 1) <= len(value) <= max_rows:
         raise ValueError("Tabla vacía o demasiado grande.")
     if rows is not None and len(value) != rows:
         raise ValueError("Dimensiones de tabla incompatibles.")
@@ -300,9 +305,11 @@ def load_project(path: str | Path) -> dict:
                         comparison=False,
                     ).items():
                         state.setdefault(key, value)
-    document["format_version"] = FORMAT_VERSION
+    if document["format_version"] < FORMAT_VERSION:
+        document["format_version"] = FORMAT_VERSION
     for section in ("draft", "calculated"):
-        document[section]["modal"].setdefault("fare_profiles", [])
+        if "modal" in document[section]:
+            document[section]["modal"].setdefault("fare_profiles", [])
     document.setdefault("fare_scenarios", [])
     return document
 
@@ -339,9 +346,16 @@ def save_project(path: str | Path, document: dict) -> None:
 def project_document(draft: dict, calculated: dict, analyst: str, tab: int, od: int) -> dict:
     """Construye el documento separando entradas en edición y últimos cálculos válidos."""
 
+    # Los ejercicios completos conservan el formato que puede abrir MacroNet 3.3.
+    sizes = {_zone_count(stage, state) for states in (draft, calculated)
+             for stage, state in states.items()}
+    incomplete = (
+        set(calculated) != set(STAGES) or len(sizes) != 1 or 0 in sizes or od < 0
+        or not draft["assignment"]["links"] or draft["assignment"]["mode_index"] < 0
+    )
     return {
         "format": "MacroNet Transport",
-        "format_version": FORMAT_VERSION,
+        "format_version": PARTIAL_FORMAT_VERSION if incomplete else FORMAT_VERSION,
         "app_version": __version__,
         "analyst_name": analyst,
         "draft": draft,

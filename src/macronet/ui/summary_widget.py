@@ -55,6 +55,7 @@ class SummaryWidget(QWidget):
         self.assigned_mode = "Automóvil"
         self.comparison_result = None
         self.metadata_provider = lambda: {}
+        self.report_issue_provider = lambda: ""
         self.fare_scenarios_provider = lambda: []
         self.microsimulation_provider = lambda: None
         self.analyst_name = ""
@@ -122,6 +123,10 @@ class SummaryWidget(QWidget):
         self.export_button = QPushButton("Descargar informe (.tex)")
         self.export_button.setEnabled(False)
         self.export_button.clicked.connect(self._export_tex)
+        self.report_note = QLabel()
+        self.report_note.hide()
+        self.report_note.setWordWrap(True)
+        layout.addWidget(self.report_note)
         layout.addWidget(self.export_button)
         layout.addStretch()
 
@@ -257,34 +262,27 @@ class SummaryWidget(QWidget):
         for column, value in enumerate(values):
             self._set_item(self.mode_table, row, column, value)
 
-    def _update_export_state(self) -> None:
-        self.export_button.setEnabled(
-            all(
-                result is not None
-                for result in (
-                    self.generation_result,
-                    self.distribution_result,
-                    self.mode_choice_result,
-                    self.assignment_result,
-                )
+    def _can_export(self):
+        return all(
+            result is not None
+            for result in (
+                self.generation_result, self.distribution_result,
+                self.mode_choice_result, self.assignment_result,
             )
         )
 
+    def _update_export_state(self) -> None:
+        issue = self.report_issue_provider() if self._can_export() else ""
+        self.report_note.setText(issue)
+        self.report_note.setVisible(bool(issue))
+        self.export_button.setEnabled(self._can_export() and not issue)
+
     def _export_tex(self) -> None:
-        if not all(
-            result is not None
-            for result in (
-                self.generation_result,
-                self.distribution_result,
-                self.mode_choice_result,
-                self.assignment_result,
-            )
-        ):
-            QMessageBox.information(
-                self,
-                "Análisis incompleto",
-                "Deben existir resultados válidos de las cuatro etapas.",
-            )
+        issue = self.report_issue_provider() if self._can_export() else (
+            "Deben existir resultados válidos de las cuatro etapas."
+        )
+        if issue:
+            QMessageBox.information(self, "Análisis incompleto", issue)
             return
 
         analyst, accepted = QInputDialog.getText(

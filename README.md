@@ -6,7 +6,7 @@ El proyecto busca que el estudiante pueda observar el proceso completo, modifica
 
 ## Alcance actual
 
-La versión `3.3.2` (familia **3.x**) incluye:
+La versión `3.4.0` (familia **3.x**) incluye:
 
 1. Generación y atracción de viajes.
 2. Distribución de viajes.
@@ -22,6 +22,10 @@ y matrices en anexos; puede compilarse con `pdflatex` u Overleaf. La red GraphML
 libre, capacidades, flujos y relaciones volumen/capacidad para su análisis en Gephi.
 
 Cada módulo deberá separar el modelo matemático de la interfaz gráfica y conservar resultados intermedios para su explicación y validación manual.
+
+Al iniciar se muestra **Inicio y alcance** con el ejercicio vacío. Para practicar,
+seleccione **Proyecto → Cargar caso demostrativo**. Consulte el
+[manual de usuario](docs/manual.md) para capturar datos, calcular y exportar.
 
 ## Principios del proyecto
 

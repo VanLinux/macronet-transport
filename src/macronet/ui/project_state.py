@@ -166,7 +166,10 @@ def capture_document(tabs) -> dict:
     )
     summary = tabs.widget(5)
     document["results"] = {
-        "assignment": json.loads(json.dumps(asdict(summary.assignment_result))),
+        "assignment": (
+            json.loads(json.dumps(asdict(summary.assignment_result)))
+            if summary.assignment_result is not None else None
+        ),
         "comparison": [json.loads(json.dumps(asdict(r))) for r in summary.comparison_result]
         if summary.comparison_result
         else [],
@@ -180,6 +183,8 @@ def restore_document(tabs, document: dict) -> None:
     """Recalcula instantáneas válidas y conserva las celdas todavía en edición."""
 
     for stage in STAGES:
+        if stage not in document["calculated"]:
+            continue
         widget = tabs.stages[stage]
         if stage == "assignment":
             widget._mode_choice_result = tabs.widget(3).current_result
@@ -187,6 +192,7 @@ def restore_document(tabs, document: dict) -> None:
             widget.mode_selector.clear()
             widget.mode_selector.addItems(
                 [mode.mode_name for mode in widget._mode_choice_result.mode_summaries]
+                if widget._mode_choice_result else [document["calculated"][stage]["mode_name"]]
             )
             widget.mode_selector.blockSignals(False)
         widget.blockSignals(True)
@@ -198,20 +204,33 @@ def restore_document(tabs, document: dict) -> None:
         finally:
             widget.blockSignals(False)
     summary = tabs.widget(5)
-    summary.set_from_generation(tabs.widget(1).current_result)
-    summary.set_from_distribution(tabs.widget(2).current_result)
-    summary.set_from_mode_choice(tabs.widget(3).current_result)
-    summary.set_from_assignment(
-        tabs.widget(4).current_result, tabs.widget(4).assigned_mode_name, tabs.widget(4).comparison
-    )
+    if tabs.widget(1).current_result is not None:
+        summary.set_from_generation(tabs.widget(1).current_result)
+    if tabs.widget(2).current_result is not None:
+        summary.set_from_distribution(tabs.widget(2).current_result)
+    modal = tabs.widget(3).current_result
+    if modal is not None:
+        summary.set_from_mode_choice(modal)
+        assignment = tabs.widget(4)
+        assignment._mode_choice_result = modal
+        assignment.mode_selector.blockSignals(True)
+        assignment.mode_selector.clear()
+        assignment.mode_selector.addItems([mode.mode_name for mode in modal.mode_summaries])
+        assignment.mode_selector.blockSignals(False)
+    if tabs.widget(4).current_result is not None:
+        summary.set_from_assignment(
+            tabs.widget(4).current_result, tabs.widget(4).assigned_mode_name,
+            tabs.widget(4).comparison,
+        )
     summary.analyst_name = document["analyst_name"]
     for stage, widget in tabs.stages.items():
         restore_inputs(stage, widget, document["draft"][stage])
     tabs.calculated_states = document["calculated"]
+    summary._update_export_state()
     tabs.widget(3).fare_scenarios = copy.deepcopy(document.get("fare_scenarios", []))
     if "microsimulation" in document:
         tabs.microsimulation.restore_state(document["microsimulation"])
-    else:
+    elif "assignment" in document["calculated"]:
         tabs.microsimulation.update_geometry(document["calculated"]["assignment"], preserve=False)
     tabs.widget(3).od_selector.setCurrentIndex(
         min(document["view"]["od"], tabs.widget(3).od_selector.count() - 1)

@@ -35,19 +35,6 @@ from macronet.ui.calibration_widget import CalibrationPanel
 from macronet.ui.fares_dialog import FaresDialog
 from macronet.ui.fares_dialog import values as table_text
 
-EXAMPLE_NAMES = ("Centro", "Norte", "Sur", "Oriente")
-EXAMPLE_IMPEDANCES = (
-    (3.0, 10.0, 15.0, 20.0),
-    (10.0, 3.0, 12.0, 18.0),
-    (15.0, 12.0, 3.0, 9.0),
-    (20.0, 18.0, 9.0, 3.0),
-)
-EXAMPLE_TRIPS = (
-    (168.4491603590, 50.4956384490, 24.1045703450, 16.9563325700),
-    (112.1964035420, 136.3880209280, 43.6419313610, 27.7783883330),
-    (65.9646842480, 53.7515493410, 104.0516062230, 66.2295602910),
-    (53.3897518500, 39.3647912820, 76.2018920710, 161.0357188060),
-)
 DEFAULT_MODES = (
     ModeSpecification("Automóvil", 0.3, 1.0, 0.0, 5.0, 0.25),
     ModeSpecification("Transporte público", 0.6, 1.35, 5.0, 6.0, 0.0),
@@ -72,15 +59,15 @@ class ModeChoiceWidget(QWidget):
 
     def __init__(self) -> None:
         super().__init__()
-        self._zone_names = EXAMPLE_NAMES
-        self._trip_matrix = EXAMPLE_TRIPS
-        self._impedance_matrix = EXAMPLE_IMPEDANCES
+        self._zone_names = ()
+        self._trip_matrix = ()
+        self._impedance_matrix = ()
         self.current_result: ModeChoiceResult | None = None
         self.fare_profiles = []
         self.fare_scenarios = []
         self._modal_matrix_tables: list[QTableWidget] = []
         self._build_ui()
-        self._restore_defaults()
+        self._set_mode_parameters(self._neutral_modes())
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -219,7 +206,6 @@ class ModeChoiceWidget(QWidget):
         self._trip_matrix = distribution_result.trip_matrix
         self._impedance_matrix = distribution_result.impedance_matrix
         self._populate_od_selector()
-        self.calculate()
 
     def calculate(self, *, raise_errors: bool = False) -> None:
         try:
@@ -310,8 +296,20 @@ class ModeChoiceWidget(QWidget):
             self.fares_changed.emit()
         self.time_coefficient_input.setValue(-0.08)
         self.cost_coefficient_input.setValue(-0.18)
-        self.modes_table.setRowCount(len(DEFAULT_MODES))
-        for row, mode in enumerate(DEFAULT_MODES):
+        self._set_mode_parameters(self._neutral_modes())
+        if self._zone_names:
+            self.calculate()
+
+    @staticmethod
+    def _neutral_modes():
+        return tuple(ModeSpecification(mode.name, 0, 1, 0, 0, 0) for mode in DEFAULT_MODES)
+
+    def load_example(self):
+        self._set_mode_parameters(DEFAULT_MODES)
+
+    def _set_mode_parameters(self, modes):
+        self.modes_table.setRowCount(len(modes))
+        for row, mode in enumerate(modes):
             values = (
                 mode.name,
                 mode.alternative_constant,
@@ -322,8 +320,6 @@ class ModeChoiceWidget(QWidget):
             )
             for column, value in enumerate(values):
                 self.modes_table.setItem(row, column, QTableWidgetItem(str(value)))
-        self._populate_od_selector()
-        self.calculate()
 
     def _populate_od_selector(self) -> None:
         previous = self.od_selector.currentIndex()

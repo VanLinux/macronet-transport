@@ -41,12 +41,6 @@ from macronet.exporters import save_assignment_csv, save_assignment_graphml
 from macronet.ui.appearance import AdaptiveCanvas
 
 EXAMPLE_NAMES = ("Centro", "Norte", "Sur", "Oriente")
-EXAMPLE_AUTO_DEMAND = (
-    (67.4361560353, 21.1501975770, 10.2298692064, 7.1938280208),
-    (46.9936845089, 54.6009480904, 18.4082163313, 11.8041455673),
-    (27.9951097421, 22.6724647044, 41.6555377182, 27.6174896070),
-    (22.6509294563, 16.7276704810, 31.7759162685, 64.4682932079),
-)
 
 
 class NetworkCanvas(AdaptiveCanvas):
@@ -124,21 +118,20 @@ class AssignmentWidget(QWidget):
     """Edita la red y muestra rutas, flujos y utilización."""
 
     result_calculated = Signal(object)
+    inputs_changed = Signal()
 
     LINK_HEADERS = ("Arco", "Desde", "Hasta", "Tiempo libre", "Capacidad")
 
     def __init__(self) -> None:
         super().__init__()
-        self._zone_names = EXAMPLE_NAMES
-        self._demand_matrix = EXAMPLE_AUTO_DEMAND
-        self._mode_name = "Automóvil"
+        self._zone_names = ()
+        self._demand_matrix = ()
+        self._mode_name = ""
         self._mode_choice_result = None
         self.current_result: AssignmentResult | None = None
         self.comparison: tuple[AssignmentResult, AssignmentResult] | None = None
         self.calculated_zone_nodes: tuple[str, ...] = ()
         self._build_ui()
-        self._set_zone_nodes(EXAMPLE_NAMES)
-        self._restore_network()
 
     @property
     def assigned_mode_name(self) -> str:
@@ -201,7 +194,6 @@ class AssignmentWidget(QWidget):
 
         layout.addWidget(QLabel("Modo que se asignará a esta red:"))
         self.mode_selector = QComboBox()
-        self.mode_selector.addItem(self._mode_name)
         self.mode_selector.currentIndexChanged.connect(self._select_mode)
         layout.addWidget(self.mode_selector)
 
@@ -217,13 +209,20 @@ class AssignmentWidget(QWidget):
         self.links_table.setMaximumHeight(245)
         layout.addWidget(self.links_table)
 
-        restore_button = QPushButton("Restaurar red didáctica")
-        restore_button.clicked.connect(self._restore_network)
+        link_actions = QHBoxLayout()
+        for label, callback in (
+            ("Agregar arco", self._add_link),
+            ("Quitar arco seleccionado", self._remove_link),
+        ):
+            button = QPushButton(label)
+            button.clicked.connect(callback)
+            link_actions.addWidget(button)
+        link_actions.addStretch()
+        layout.addLayout(link_actions)
         assign_button = QPushButton("Asignar Todo-o-Nada")
         self.assign_button = assign_button
         assign_button.setDefault(True)
         assign_button.clicked.connect(self.calculate)
-        layout.addWidget(restore_button)
         layout.addWidget(assign_button)
         compare_button = QPushButton("Comparar Todo-o-Nada y Wardrop")
         compare_button.clicked.connect(self.compare_methods)
@@ -351,8 +350,11 @@ class AssignmentWidget(QWidget):
         self._demand_matrix = selected.trip_matrix
         self._mode_name = selected.mode_name
         if len(new_names) != len(old_names):
+            centroids = dict(zip(old_names, self._read_zone_nodes(), strict=True))
             self._set_zone_nodes(new_names)
-            self._set_links(self._default_links(new_names))
+            for row, name in enumerate(new_names):
+                if name in centroids:
+                    self.zone_nodes_table.item(row, 1).setText(centroids[name])
         else:
             # Renaming a zone must not restore the user's network or centroid mapping.
             renames = dict(zip(old_names, new_names, strict=True))
@@ -363,8 +365,8 @@ class AssignmentWidget(QWidget):
             for row in range(self.links_table.rowCount()):
                 for column in (1, 2):
                     item = self.links_table.item(row, column)
-                    item.setText(renames.get(item.text(), item.text()))
-        self.calculate()
+                    if item is not None:
+                        item.setText(renames.get(item.text(), item.text()))
 
     def _select_mode(self, index: int) -> None:
         if self._mode_choice_result is None or index < 0:
@@ -570,36 +572,40 @@ class AssignmentWidget(QWidget):
             return
         QMessageBox.information(self, "Exportación terminada", f"Grafo guardado en:\n{path}")
 
-    def _restore_network(self) -> None:
-        self._set_links(self._default_links(self._zone_names))
-        self.calculate()
+    def _add_link(self) -> None:
+        row = self.links_table.rowCount()
+        if row >= 10_000:
+            return
+        self.links_table.insertRow(row)
+        for column in range(self.links_table.columnCount()):
+            self.links_table.setItem(row, column, QTableWidgetItem(""))
+        self.links_table.setCurrentCell(row, 0)
+        self.links_table.editItem(self.links_table.item(row, 0))
 
-    @staticmethod
-    def _default_links(names: tuple[str, ...]) -> tuple[Link, ...]:
-        if len(names) < 2:
-            return ()
-        if len(names) == 4:
-            specifications = (
-                (0, 1, 6.0, 50.0),
-                (0, 2, 9.0, 40.0),
-                (0, 3, 16.0, 30.0),
-                (1, 2, 5.0, 40.0),
-                (1, 3, 10.0, 30.0),
-                (2, 3, 4.0, 45.0),
-            )
-        else:
-            specifications = tuple(
-                (index, (index + 1) % len(names), 6.0, 180.0) for index in range(len(names))
-            )
-        links: list[Link] = []
-        for first, second, travel_time, capacity in specifications:
-            links.append(
-                Link(f"L{first}{second}", names[first], names[second], travel_time, capacity)
-            )
-            links.append(
-                Link(f"L{second}{first}", names[second], names[first], travel_time, capacity)
-            )
-        return tuple(links)
+    def _remove_link(self) -> None:
+        row = self.links_table.currentRow()
+        if row >= 0:
+            self.links_table.removeRow(row)
+            self._invalidate_comparison()
+            self.inputs_changed.emit()
+
+    def load_example(self) -> None:
+        names = EXAMPLE_NAMES
+        self._zone_names = names
+        self._set_zone_nodes(names)
+        specifications = (
+            (0, 1, 6.0, 50.0),
+            (0, 2, 9.0, 40.0),
+            (0, 3, 16.0, 30.0),
+            (1, 2, 5.0, 40.0),
+            (1, 3, 10.0, 30.0),
+            (2, 3, 4.0, 45.0),
+        )
+        self._set_links(tuple(
+            Link(f"L{a}{b}", names[a], names[b], time, capacity)
+            for first, second, time, capacity in specifications
+            for a, b in ((first, second), (second, first))
+        ))
 
     def _set_zone_nodes(self, names: tuple[str, ...]) -> None:
         self.zone_nodes_table.setRowCount(len(names))
