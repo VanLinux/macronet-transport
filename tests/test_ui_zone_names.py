@@ -23,6 +23,7 @@ def test_zone_rename_propagates_without_resetting_network(monkeypatch):
         QMessageBox, "question", lambda *args: QMessageBox.StandardButton.Discard
     )
     window = MainWindow()
+    assert window._load_demonstration()
     try:
         tabs = window.centralWidget()
         generation, distribution, modal, assignment = (
@@ -69,7 +70,7 @@ def test_zone_rename_propagates_without_resetting_network(monkeypatch):
         assert assignment.links_table.item(0, 4).text() == "123"
         assert summary.assignment_result.zone_names[0] == "Zona B"
         texts = [label.text() for label in tabs.widget(0).findChildren(QLabel)]
-        assert any("Desarrollador: Héctor Benítez García" in text for text in texts)
+        assert any("Héctor Alonso Benítez García" in text for text in texts)
     finally:
         window.close()
         app.processEvents()

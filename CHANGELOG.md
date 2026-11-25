@@ -1,5 +1,16 @@
 # Bitácora de versiones — MacroNet Transport
 
+## 3.4.0 — 2026-11-24
+
+- Inicio y alcance al estilo de HCNet, con metadatos, flujo de trabajo y límites.
+- Menús Archivo, Proyecto, Vista y Ayuda; exportaciones agrupadas, enlace al
+  manual y acceso a Overleaf.
+- Arranque sin datos ficticios. Carga deliberada del caso demostrativo, cálculo
+  de las cuatro etapas y guardado de ejercicios nuevos o parciales.
+- La rueda desplaza el panel sin alterar controles ni cambiar pestañas.
+- El informe en carta concentra e interpreta los resultados por etapa y conserva
+  las matrices en anexos. El archivo UTF-8 no declara inputenc ni fontenc.
+
 ## 3.3.2 — 2026-10-31
 
 - Resumen de las cuatro etapas con indicadores, participación modal, congestión

@@ -33,6 +33,8 @@ def check_installation(parent):
     QMessageBox.warning = failed_dialog
     app = QApplication.instance() or QApplication([])
     window = MainWindow()
+    if not window._load_demonstration():
+        raise RuntimeError("No se pudo cargar el caso demostrativo.")
     window.show()
     app.processEvents()
     tabs = window.centralWidget()

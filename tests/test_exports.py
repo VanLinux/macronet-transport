@@ -132,7 +132,7 @@ def test_summary_tex_contains_all_four_stages() -> None:
     assert r"Usuario: Héctor \& Grupo\_3" in content
     assert r"\documentclass[11pt,letterpaper]{article}" in content
     assert r"\usepackage[letterpaper,margin=2.5cm]{geometry}" in content
-    assert "fontenc" not in content
+    assert "fontenc" not in content and "inputenc" not in content
     assert r"\end{document}" in content
 
 
@@ -142,7 +142,12 @@ def test_report_contains_complete_matrices_and_inline_graphs() -> None:
         generation, distribution, modal, assignment, "Automóvil", "Héctor"
     )
     assert "MacroNet Transport " + __version__ in content
-    assert r"\section{Conclusiones numéricas}" in content
+    overview = content.index(r"\section{Conclusiones numéricas}")
+    assert overview < content.index(r"\section{Generación y atracción}")
+    assert "mayor producción estimada" in content
+    assert "par interzonal con mayor flujo" in content
+    assert "puntos porcentuales" in content
+    assert "presión potencial" in content
     assert r"\subsection{Matriz OD distribuida}" in content
     assert r"\subsection{Matriz de impedancias de distribución}" in content
     for mode in modal.mode_summaries:

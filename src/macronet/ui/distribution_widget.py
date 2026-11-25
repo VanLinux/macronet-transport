@@ -35,8 +35,6 @@ from macronet.exporters import save_od_csv
 from macronet.ui.calibration_widget import CalibrationPanel
 
 EXAMPLE_NAMES = ("Centro", "Norte", "Sur", "Oriente")
-EXAMPLE_PRODUCTIONS = (260.0, 320.0, 290.0, 330.0)
-EXAMPLE_ATTRACTIONS = (400.0, 280.0, 248.0, 272.0)
 EXAMPLE_COSTS = (
     (3.0, 10.0, 15.0, 20.0),
     (10.0, 3.0, 12.0, 18.0),
@@ -53,10 +51,8 @@ class DistributionWidget(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.current_result = None
-        self._zone_names = EXAMPLE_NAMES
+        self._zone_names = ()
         self._build_ui()
-        self._set_marginals(EXAMPLE_NAMES, EXAMPLE_PRODUCTIONS, EXAMPLE_ATTRACTIONS)
-        self._restore_costs()
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -176,8 +172,6 @@ class DistributionWidget(QWidget):
         self.iterations_input.setRange(1, 10_000)
         self.iterations_input.setValue(DEFAULT_MAX_ITERATIONS)
 
-        restore_button = QPushButton("Restaurar impedancias")
-        restore_button.clicked.connect(self._restore_costs)
 
         layout.addWidget(QLabel("β distribución (1/unidad de impedancia)"), 0, 0)
         layout.addWidget(self.beta_input, 1, 0)
@@ -185,7 +179,6 @@ class DistributionWidget(QWidget):
         layout.addWidget(self.tolerance_input, 1, 1)
         layout.addWidget(QLabel("Máximo de iteraciones"), 0, 2)
         layout.addWidget(self.iterations_input, 1, 2)
-        layout.addWidget(restore_button, 1, 3)
         layout.addWidget(self.advanced_functions, 2, 0, 1, 2)
         layout.addWidget(self.friction_selector, 2, 2, 1, 2)
         layout.addWidget(QLabel("α distribución (adimensional)"), 3, 0)
@@ -241,12 +234,21 @@ class DistributionWidget(QWidget):
         names = tuple(result.zone.name for result in zones)
         productions = tuple(result.production for result in zones)
         attractions = tuple(result.attraction_balanced for result in zones)
+        old_names = self._zone_names
         self._set_marginals(names, productions, attractions)
         if self.cost_table.rowCount() != len(names):
-            self._set_cost_matrix(self._default_costs(len(names)))
+            previous = {
+                (origin, destination): self.cost_table.item(i, j).text()
+                for i, origin in enumerate(old_names)
+                for j, destination in enumerate(old_names)
+                if self.cost_table.item(i, j) is not None
+            }
+            self._set_cost_matrix(tuple(
+                tuple(previous.get((origin, destination), "") for destination in names)
+                for origin in names
+            ))
         self.cost_table.setHorizontalHeaderLabels(names)
         self.cost_table.setVerticalHeaderLabels(names)
-        self.calculate()
 
     def calculate(self, *, raise_errors: bool = False) -> None:
         try:
@@ -323,25 +325,11 @@ class DistributionWidget(QWidget):
                     item.setToolTip("Cambie el nombre en Generación y pulse Calcular.")
                 self.marginals_table.setItem(row, column, item)
 
-    def _restore_costs(self) -> None:
-        if len(self._zone_names) == len(EXAMPLE_COSTS):
-            costs = EXAMPLE_COSTS
-        else:
-            costs = self._default_costs(len(self._zone_names))
-        self._set_cost_matrix(costs)
-        self.calculate()
+    def load_example(self) -> None:
+        self._zone_names = EXAMPLE_NAMES
+        self._set_cost_matrix(EXAMPLE_COSTS)
 
-    @staticmethod
-    def _default_costs(size: int) -> tuple[tuple[float, ...], ...]:
-        return tuple(
-            tuple(
-                3.0 if origin == destination else 8.0 + 3.0 * abs(origin - destination)
-                for destination in range(size)
-            )
-            for origin in range(size)
-        )
-
-    def _set_cost_matrix(self, costs: tuple[tuple[float, ...], ...]) -> None:
+    def _set_cost_matrix(self, costs: tuple[tuple[float | str, ...], ...]) -> None:
         size = len(costs)
         self.cost_table.setRowCount(size)
         self.cost_table.setColumnCount(size)

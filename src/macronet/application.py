@@ -2,21 +2,26 @@
 
 from __future__ import annotations
 
+import platform
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QKeySequence
+from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QDesktopServices, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
+    QFrame,
+    QGridLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
+    QPushButton,
     QSpinBox,
+    QStyle,
     QTableWidget,
     QTabWidget,
     QVBoxLayout,
@@ -24,10 +29,9 @@ from PySide6.QtWidgets import (
 )
 
 from macronet import __version__
-from macronet.domain.four_step import FOUR_STEP_SEQUENCE
 from macronet.project import ProjectError, load_project, save_project
 from macronet.sumo.scenario import SumoError
-from macronet.ui.appearance import Appearance, make_scrollable
+from macronet.ui.appearance import Appearance, install_scroll_guard, make_scrollable
 from macronet.ui.assignment_widget import AssignmentWidget
 from macronet.ui.distribution_widget import DistributionWidget
 from macronet.ui.generation_widget import GenerationWidget
@@ -36,28 +40,9 @@ from macronet.ui.mode_choice_widget import ModeChoiceWidget
 from macronet.ui.project_state import capture_document, capture_inputs, restore_document
 from macronet.ui.summary_widget import SummaryWidget
 
-OVERVIEW_STAGES = (
-    (
-        "Generación y atracción de viajes",
-        "Estima cuántos viajes produce y atrae cada zona mediante regresiones lineales "
-        "y balanceo proporcional.",
-    ),
-    (
-        "Distribución de viajes",
-        "Relaciona orígenes y destinos en una matriz OD mediante un modelo gravitacional "
-        "doblemente restringido y el algoritmo de Furness.",
-    ),
-    (
-        "Elección modal",
-        "Reparte cada flujo OD entre los modos disponibles mediante funciones de utilidad "
-        "y un modelo logit multinomial.",
-    ),
-    (
-        "Asignación de viajes",
-        "Carga la demanda modal con Todo-o-Nada o equilibrio de Wardrop, "
-        "con comparación de flujos y diagnóstico de convergencia.",
-    ),
-)
+REPOSITORY_URL = "https://github.com/VanLinux/macronet-transport"
+MANUAL_URL = REPOSITORY_URL + "/blob/main/docs/manual.md"
+OVERLEAF_URL = "https://www.overleaf.com/project"
 
 
 class MainWindow(QMainWindow):
@@ -66,35 +51,123 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.appearance = Appearance(self)
+        install_scroll_guard(QApplication.instance())
         self.setWindowTitle(f"MacroNet Transport {__version__}")
         self.resize(1280, 900)
         self.project_path: Path | None = None
         self._dirty = False
         self._close_after_sumo = False
         self._install_tabs(ExerciseTabs())
+        self._build_menus()
+        self._update_title()
+
+    def _build_menus(self):
+        standard = QKeySequence.StandardKey
+        icon = QStyle.StandardPixmap
         file_menu = self.menuBar().addMenu("Archivo")
-        for title, shortcut, callback in (
-            ("Abrir ejercicio (.mnet)…", QKeySequence.StandardKey.Open, self._open_project),
-            ("Guardar ejercicio", QKeySequence.StandardKey.Save, self._save_project),
-            ("Guardar ejercicio como…", QKeySequence.StandardKey.SaveAs, self._save_project_as),
-        ):
-            action = QAction(title, self)
-            action.setShortcut(shortcut)
-            action.triggered.connect(callback)
-            file_menu.addAction(action)
-        view_menu = self.menuBar().addMenu("Apariencia")
+        self._add_action(
+            file_menu, "Nuevo", self._new_project, standard.New, icon.SP_FileIcon
+        )
+        self._add_action(
+            file_menu, "Abrir…", self._open_project, standard.Open, icon.SP_DialogOpenButton
+        )
+        file_menu.addSeparator()
+        self._add_action(
+            file_menu, "Guardar", self._save_project, standard.Save, icon.SP_DialogSaveButton
+        )
+        self._add_action(file_menu, "Guardar como…", self._save_project_as, standard.SaveAs)
+        export = file_menu.addMenu("Exportar")
+        exports = (
+            ("Informe técnico (.tex)…", 5, "_export_tex", "export_button"),
+            ("Matriz OD (.csv)…", 2, "_export_od_csv", "export_button"),
+            ("Matrices modales (.csv)…", 3, "_export_modal_csv", "export_button"),
+            ("Flujos de asignación (.csv)…", 4, "_export_csv", "export_graph_button"),
+            ("Red asignada (.graphml)…", 4, "_export_graphml", "export_graph_button"),
+        )
+        actions = []
+        for label, index, method, button in exports:
+            action = self._add_action(
+                export, label,
+                lambda i=index, fn=method: getattr(self.centralWidget().widget(i), fn)(),
+            )
+            actions.append((action, index, button))
+
+        def update_exports():
+            tabs = self.centralWidget()
+            for action, index, button in actions:
+                action.setEnabled(getattr(tabs.widget(index), button).isEnabled())
+
+        export.aboutToShow.connect(update_exports)
+        file_menu.addSeparator()
+        self._add_action(file_menu, "Salir", self.close, standard.Quit)
+
+        project = self.menuBar().addMenu("Proyecto")
+        self._add_action(project, "Cargar caso demostrativo", self._load_demonstration)
+        simulation = project.addMenu("Simular")
+        self._add_action(simulation, "Calcular las cuatro etapas", self._calculate_project)
+        self._add_action(simulation, "Microsimulación con SUMO…", self._open_sumo)
+
+        view_menu = self.menuBar().addMenu("Vista")
         themes = QActionGroup(self)
         themes.setExclusive(True)
-        for title, mode in (("Seguir al sistema", "auto"), ("Claro", "light"), ("Oscuro", "dark")):
-            action = QAction(title, themes)
+        for label, mode in (("Modo claro", "light"), ("Modo oscuro", "dark")):
+            action = QAction(label, themes)
             action.setCheckable(True)
-            action.setChecked(mode == "auto")
+            action.setChecked(self.appearance.dark == (mode == "dark"))
             action.triggered.connect(lambda _checked, value=mode: self.appearance.set_mode(value))
             view_menu.addAction(action)
+
         help_menu = self.menuBar().addMenu("Ayuda")
-        about = help_menu.addAction("Acerca de…")
-        about.triggered.connect(self._show_about)
+        self._add_action(help_menu, "Acerca de…", self._show_about)
+        self._add_action(
+            help_menu, "Manual de usuario ↗", lambda: QDesktopServices.openUrl(QUrl(MANUAL_URL))
+        )
+        self._add_action(
+            help_menu, "Compilar .tex en Overleaf ↗",
+            lambda: QDesktopServices.openUrl(QUrl(OVERLEAF_URL)),
+        )
+
+    def _add_action(self, menu, label, callback, shortcut=None, icon=None):
+        action = QAction(label, self)
+        if icon is not None:
+            action.setIcon(self.style().standardIcon(icon))
+        if shortcut is not None:
+            action.setShortcut(shortcut)
+        action.triggered.connect(lambda _checked=False: callback())
+        menu.addAction(action)
+        return action
+
+    def _new_project(self):
+        return self._replace_exercise(demonstration=False)
+
+    def _load_demonstration(self):
+        return self._replace_exercise(demonstration=True)
+
+    def _replace_exercise(self, *, demonstration):
+        if not self._can_replace_exercise():
+            return False
+        self._install_tabs(ExerciseTabs(demonstration=demonstration))
+        self.project_path = None
+        self._dirty = demonstration
         self._update_title()
+        if demonstration:
+            self.statusBar().showMessage(
+                "Caso demostrativo cargado · 4 zonas · Datos ficticios para práctica."
+            )
+        return True
+
+    def _calculate_project(self):
+        tabs = self.centralWidget()
+        if tabs.microsimulation.is_running:
+            return
+        self._commit_pending_editor()
+        if tabs.calculate_all():
+            tabs.setCurrentIndex(5)
+            self.statusBar().showMessage("Cálculo de las cuatro etapas terminado.")
+
+    def _open_sumo(self):
+        tabs = self.centralWidget()
+        tabs.setCurrentWidget(tabs.microsimulation)
 
     def _show_about(self):
         from macronet.ui.about_dialog import AboutDialog
@@ -118,6 +191,8 @@ class MainWindow(QMainWindow):
         for widget in tabs.stages.values():
             if hasattr(widget, "calibration"):
                 widget.calibration.changed.connect(self._mark_dirty)
+        for key in ("generation", "assignment"):
+            tabs.stages[key].inputs_changed.connect(self._mark_dirty)
         tabs.widget(5).analyst_changed.connect(self._mark_dirty)
         tabs.widget(3).fares_changed.connect(self._mark_dirty)
         tabs.microsimulation.changed.connect(self._mark_dirty)
@@ -125,7 +200,7 @@ class MainWindow(QMainWindow):
 
     def _sumo_running_changed(self, running):
         if not running and self._close_after_sumo:
-            QTimer.singleShot(0, self.close)
+            QTimer.singleShot(0, self, self.close)
 
     def _mark_dirty(self, *_args) -> None:
         self._dirty = True
@@ -137,11 +212,11 @@ class MainWindow(QMainWindow):
             f"MacroNet Transport {__version__} — {name}{' *' if self._dirty else ''}"
         )
         self.statusBar().showMessage(
-            "Cambios sin guardar · Archivo → Guardar ejercicio (.mnet)"
+            "Cambios sin guardar · Archivo → Guardar (.mnet)"
             if self._dirty
             else str(self.project_path)
             if self.project_path
-            else "Archivo → Abrir o Guardar ejercicio (.mnet) para continuar después."
+            else "Proyecto → Cargar caso demostrativo, o capture sus datos en la etapa 1."
         )
 
     def _save_project_as(self) -> bool:
@@ -210,15 +285,7 @@ class MainWindow(QMainWindow):
     def open_project_path(self, path: Path) -> bool:
         """Prepara una vista completa y solo la sustituye si el archivo es válido."""
 
-        if self.centralWidget().microsimulation.is_running:
-            QMessageBox.information(
-                self,
-                "Microsimulación en curso",
-                "Cancele o espere la ejecución antes de abrir otro ejercicio.",
-            )
-            return False
-        # Guardar antes de leer evita reabrir una copia antigua del mismo archivo.
-        if not self._confirm_unsaved():
+        if not self._can_replace_exercise():
             return False
         candidate = None
         try:
@@ -241,6 +308,16 @@ class MainWindow(QMainWindow):
             )
         return True
 
+    def _can_replace_exercise(self):
+        if self.centralWidget().microsimulation.is_running:
+            QMessageBox.information(
+                self,
+                "Microsimulación en curso",
+                "Cancele o espere la ejecución antes de cambiar de ejercicio.",
+            )
+            return False
+        return self._confirm_unsaved()
+
     def closeEvent(self, event: QCloseEvent) -> None:
         simulation = self.centralWidget().microsimulation
         if simulation.is_running:
@@ -258,68 +335,95 @@ class MainWindow(QMainWindow):
 class ExerciseTabs(QTabWidget):
     """Ejercicio independiente que puede validarse antes de sustituir el abierto."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, demonstration=False) -> None:
         super().__init__()
-
-        tabs = self
-        tabs.addTab(self._build_overview(), "Inicio")
-        generation_widget = GenerationWidget()
-        distribution_widget = DistributionWidget()
-        mode_choice_widget = ModeChoiceWidget()
-        assignment_widget = AssignmentWidget()
-        summary_widget = SummaryWidget()
-        self.microsimulation = MicrosimulationWidget(self._sumo_source)
-        generation_widget.result_calculated.connect(distribution_widget.set_from_generation)
-        generation_widget.result_calculated.connect(summary_widget.set_from_generation)
-        distribution_widget.result_calculated.connect(mode_choice_widget.set_from_distribution)
-        distribution_widget.result_calculated.connect(summary_widget.set_from_distribution)
-        mode_choice_widget.result_calculated.connect(assignment_widget.set_from_mode_choice)
-        mode_choice_widget.result_calculated.connect(summary_widget.set_from_mode_choice)
-        assignment_widget.result_calculated.connect(self._update_assignment_summary)
-        assignment_widget.result_calculated.connect(self.microsimulation.invalidate)
-        tabs.addTab(generation_widget, "1. Generación y atracción")
-        tabs.addTab(distribution_widget, "2. Distribución")
-        tabs.addTab(mode_choice_widget, "3. Elección modal")
-        tabs.addTab(assignment_widget, "4. Asignación")
-        tabs.addTab(summary_widget, "Resumen")
-        tabs.addTab(self.microsimulation, "Microsimulación SUMO")
-
-        if generation_widget.current_result is not None:
-            summary_widget.set_from_generation(generation_widget.current_result)
-            distribution_widget.set_from_generation(generation_widget.current_result)
-
-        for index, stage in enumerate(FOUR_STEP_SEQUENCE[4:], start=5):
-            placeholder = QLabel(
-                f"{stage.display_name}\n\nMódulo planificado para una versión posterior."
-            )
-            placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            placeholder.setStyleSheet("font-size: 18px; color: #666;")
-            tabs.addTab(placeholder, f"{index}. {stage.display_name}")
-            tabs.setTabEnabled(tabs.count() - 1, False)
-
-        self.stages = dict(
-            zip(
-                ("generation", "distribution", "modal", "assignment"),
-                (generation_widget, distribution_widget, mode_choice_widget, assignment_widget),
-                strict=True,
-            )
-        )
-        self.calculated_states = {
-            stage: capture_inputs(stage, widget) for stage, widget in self.stages.items()
+        self._batch = False
+        self.addTab(self._build_overview(), "Inicio y alcance")
+        self.stages = {
+            "generation": GenerationWidget(),
+            "distribution": DistributionWidget(),
+            "modal": ModeChoiceWidget(),
+            "assignment": AssignmentWidget(),
         }
-        for widget in self.stages.values():
-            widget.result_calculated.connect(self._capture_calculated_state)
-        summary_widget.metadata_provider = self._report_metadata
-        summary_widget.fare_scenarios_provider = lambda: mode_choice_widget.fare_scenarios
-        summary_widget.microsimulation_provider = self.microsimulation.state
-        self.microsimulation.changed.connect(summary_widget.refresh_sumo)
-        self.microsimulation.sync_geometry()
-        for widget in (*self.stages.values(), summary_widget, self.microsimulation):
+        self.calculated_states = {}
+        summary = SummaryWidget()
+        self.microsimulation = MicrosimulationWidget(self._sumo_source)
+        for widget, label in zip(
+            self.stages.values(),
+            ("1. Generación y atracción", "2. Distribución", "3. Elección modal", "4. Asignación"),
+            strict=True,
+        ):
+            self.addTab(widget, label)
+        self.addTab(summary, "Resumen")
+        self.addTab(self.microsimulation, "Microsimulación SUMO")
+        for stage, widget in self.stages.items():
+            widget.result_calculated.connect(
+                lambda result, key=stage: self._stage_calculated(key, result)
+            )
+        summary.metadata_provider = self._report_metadata
+        summary.report_issue_provider = self._report_issue
+        summary.fare_scenarios_provider = lambda: self.stages["modal"].fare_scenarios
+        summary.microsimulation_provider = self.microsimulation.state
+        self.microsimulation.changed.connect(summary.refresh_sumo)
+        for widget in (self.widget(0), *self.stages.values(), summary, self.microsimulation):
             make_scrollable(widget)
-        summary_widget.mode_table.setColumnWidth(0, 220)
+        summary.mode_table.setColumnWidth(0, 220)
+        if demonstration:
+            self.stages["distribution"].load_example()
+            self.stages["modal"].load_example()
+            self.stages["assignment"].load_example()
+            self.stages["generation"].load_example()
+            self.microsimulation.sync_geometry()
+
+    def calculate_all(self):
+        """Calcula en secuencia y muestra la primera etapa que aún requiere datos."""
+        self._batch = True
+        try:
+            for index, widget in enumerate(self.stages.values(), 1):
+                try:
+                    widget.calculate(raise_errors=True)
+                except ValueError as error:
+                    self.setCurrentIndex(index)
+                    QMessageBox.warning(self, self.tabText(index), str(error))
+                    return False
+        finally:
+            self._batch = False
+        return True
+
+    def _stage_calculated(self, stage, result):
+        widget = self.stages[stage]
+        self.calculated_states[stage] = capture_inputs(stage, widget)
+        summary = self.widget(5)
+        next_stage = None
+        if stage == "generation":
+            if result != summary.generation_result:
+                next_stage = self.stages["distribution"]
+                next_stage.set_from_generation(result)
+            summary.set_from_generation(result)
+        elif stage == "distribution":
+            summary.set_from_distribution(result)
+            next_stage = self.stages["modal"]
+            next_stage.set_from_distribution(result)
+        elif stage == "modal":
+            summary.set_from_mode_choice(result)
+            next_stage = self.stages["assignment"]
+            next_stage.set_from_mode_choice(result)
+        else:
+            summary.set_from_assignment(result, widget.assigned_mode_name, widget.comparison)
+            self.microsimulation.invalidate()
+            summary.refresh_sumo()
+        if next_stage is not None and not self._batch:
+            try:
+                next_stage.calculate(raise_errors=True)
+            except ValueError:
+                # Puede faltar una matriz de impedancias o una red aún en captura.
+                # El botón de la etapa muestra el diagnóstico completo cuando se pulsa.
+                pass
 
     def _sumo_source(self):
-        source = self.calculated_states["assignment"]
+        source = self.calculated_states.get("assignment")
+        if source is None:
+            raise SumoError("Calcule la asignación antes de preparar la microsimulación.")
         if capture_inputs("assignment", self.stages["assignment"]) != source:
             raise SumoError(
                 "Hay cambios de asignación pendientes. Pulse Asignar o Comparar "
@@ -330,48 +434,106 @@ class ExerciseTabs(QTabWidget):
     def _report_metadata(self):
         return self.calculated_states
 
-    def _capture_calculated_state(self, _result: object) -> None:
-        sender = self.sender()
-        for stage, widget in self.stages.items():
-            if widget is sender:
-                self.calculated_states[stage] = capture_inputs(stage, widget)
-                break
-
-    def _update_assignment_summary(self, result: object) -> None:
-        assignment = self.widget(4)
-        self.widget(5).set_from_assignment(
-            result, assignment.assigned_mode_name, assignment.comparison
+    def _report_issue(self):
+        summary = self.widget(5)
+        if not {"modal", "assignment"} <= self.calculated_states.keys():
+            return ""
+        modal = self.calculated_states["modal"]
+        assignment = self.calculated_states["assignment"]
+        distribution = summary.distribution_result
+        mode = next(
+            (mode for mode in summary.mode_choice_result.mode_summaries
+             if mode.mode_name == assignment["mode_name"]),
+            None,
         )
+        if (
+            tuple(zone.zone.name for zone in summary.generation_result.zones)
+            != distribution.zone_names
+            or tuple(modal["zone_names"]) != distribution.zone_names
+            or modal["trip_matrix"] != [list(row) for row in distribution.trip_matrix]
+            or modal["impedance_matrix"] != [list(row) for row in distribution.impedance_matrix]
+            or tuple(assignment["zone_names"]) != summary.mode_choice_result.zone_names
+            or mode is None
+            or assignment["demand_matrix"] != [list(row) for row in mode.trip_matrix]
+        ):
+            return (
+                "El resumen conserva resultados anteriores de alguna etapa. "
+                "Actualice los cálculos antes de exportar el informe conjunto."
+            )
+        return ""
 
     @staticmethod
     def _build_overview() -> QWidget:
-        """Construye la portada y el recorrido de aprendizaje."""
-
         container = QWidget()
         layout = QVBoxLayout(container)
+        card = QFrame()
+        card.setObjectName("overviewCard")
+        content = QVBoxLayout(card)
+        content.setContentsMargins(18, 16, 18, 18)
+        content.setSpacing(9)
 
-        title = QLabel("MacroNet Transport")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("font-size: 28px; font-weight: 600;")
-        layout.addWidget(title)
-
-        subtitle = QLabel("Modelo educativo de transporte de cuatro etapas para macrosimulación")
-        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(subtitle)
-
-        for index, (name, description) in enumerate(OVERVIEW_STAGES, start=1):
-            label = QLabel(f"<b>{index}. {name}</b><br><small>{description}</small>")
+        def add_label(text):
+            label = QLabel(text)
             label.setTextFormat(Qt.TextFormat.RichText)
             label.setWordWrap(True)
-            label.setStyleSheet("font-size: 18px; padding: 10px;")
-            layout.addWidget(label)
+            content.addWidget(label)
+            return label
 
+        add_label("<b>MacroNet Transport</b>").setStyleSheet("font-size: 28px;")
+        add_label(
+            "<b>Modelación macroscópica de la demanda de transporte</b><br>"
+            "Herramienta libre para estudiar el modelo clásico de cuatro etapas."
+        )
+        metadata = QGridLayout()
+        metadata.setHorizontalSpacing(18)
+        metadata.setVerticalSpacing(6)
+        metadata.setColumnStretch(2, 1)
+        for row, (key, value) in enumerate((
+            ("Versión", __version__),
+            ("Desarrollador", "Héctor Alonso Benítez García"),
+            ("Licencia", "GNU General Public License v3.0"),
+            ("Plataforma actual", platform.system()),
+            ("Repositorio", "github.com/VanLinux/macronet-transport"),
+        )):
+            metadata.addWidget(QLabel(f"<b>{key}</b>"), row, 0)
+            if key == "Repositorio":
+                link = QPushButton(value)
+                link.setObjectName("overviewLink")
+                link.setCursor(Qt.CursorShape.PointingHandCursor)
+                link.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(REPOSITORY_URL)))
+                metadata.addWidget(link, row, 1, alignment=Qt.AlignmentFlag.AlignLeft)
+            else:
+                metadata.addWidget(QLabel(value), row, 1)
+        content.addLayout(metadata)
+
+        add_label(
+            "<b>Alcance:</b> estima viajes por zona, distribuye la demanda en una matriz OD, "
+            "reparte los viajes entre modos y asigna un modo a la red vial por Todo o Nada "
+            "o por equilibrio de Wardrop. Incluye calibración, tarifas y "
+            "microsimulación vehicular opcional con SUMO."
+        )
+        add_label(
+            "<b>Límites:</b> no diseña intersecciones ni optimiza semáforos. "
+            "No pronostica con datos reales sin calibración y validación, "
+            "ni determina por sí solo el nivel de servicio HCM."
+        )
+        add_label(
+            "<b>Flujo de trabajo</b>"
+            "<ol><li>Capture las zonas o elija Proyecto → Cargar caso demostrativo.</li>"
+            "<li>Calcule producciones y atracciones; capture las impedancias OD.</li>"
+            "<li>Revise los parámetros de elección modal y las tarifas, si se usan.</li>"
+            "<li>Defina centroides y arcos; elija el método de asignación.</li>"
+            "<li>Revise el Resumen y exporte el informe técnico desde Archivo.</li></ol>"
+        )
+        add_label(
+            "<b>Supuestos principales</b><ul>"
+            "<li>Las unidades y el periodo de análisis deben ser coherentes entre etapas.</li>"
+            "<li>Las impedancias, parámetros y capacidades representan el escenario analizado.</li>"
+            "<li>SUMO requiere una red y una demanda vehicular coherentes; "
+            "la geometría inicial debe verificarse antes de simular.</li></ul>"
+        )
+        layout.addWidget(card)
         layout.addStretch()
-
-        credits = QLabel("Software libre (GPL-3.0) · Desarrollador: Héctor Benítez García")
-        credits.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        credits.setStyleSheet("font-size: 12px; padding: 6px;")
-        layout.addWidget(credits)
         return container
 
 

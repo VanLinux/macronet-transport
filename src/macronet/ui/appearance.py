@@ -4,11 +4,17 @@ from pathlib import Path
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from PySide6.QtCore import QEvent, QObject, QSize, Qt
-from PySide6.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QPalette
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QPalette, QWheelEvent
 from PySide6.QtWidgets import (
+    QAbstractScrollArea,
+    QAbstractSlider,
+    QAbstractSpinBox,
     QApplication,
+    QComboBox,
     QHeaderView,
     QScrollArea,
+    QScrollBar,
+    QTabBar,
     QTableWidget,
     QVBoxLayout,
     QWidget,
@@ -26,6 +32,44 @@ def install_font(app):
     family = "Latin Modern Roman" if "Latin Modern Roman" in families else "DejaVu Serif"
     app.setFont(QFont(family, 12))
     app.setProperty("macronet_font_installed", True)
+
+
+class ScrollGuard(QObject):
+    """Desvía la rueda de los controles de edición hacia su área desplazable."""
+
+    def eventFilter(self, target, event):
+        if event.type() != QEvent.Type.Wheel or not isinstance(target, QWidget):
+            return False
+        widget = target
+        while widget is not None and not isinstance(widget, QAbstractScrollArea):
+            if isinstance(widget, (QAbstractSpinBox, QComboBox, QTabBar)) or (
+                isinstance(widget, QAbstractSlider) and not isinstance(widget, QScrollBar)
+            ):
+                parent = widget.parentWidget()
+                while parent is not None and not isinstance(parent, QAbstractScrollArea):
+                    if parent.isWindow():
+                        break
+                    parent = parent.parentWidget()
+                if isinstance(parent, QAbstractScrollArea):
+                    viewport = parent.viewport()
+                    wheel = QWheelEvent(
+                        viewport.mapFromGlobal(event.globalPosition()), event.globalPosition(),
+                        event.pixelDelta(), event.angleDelta(), event.buttons(),
+                        event.modifiers(), event.phase(), event.inverted(), event.source(),
+                    )
+                    QApplication.sendEvent(viewport, wheel)
+                event.accept()
+                return True
+            if widget.isWindow():
+                break
+            widget = widget.parentWidget()
+        return False
+
+
+def install_scroll_guard(app):
+    if not hasattr(app, "_macronet_scroll_guard"):
+        app._macronet_scroll_guard = ScrollGuard(app)
+        app.installEventFilter(app._macronet_scroll_guard)
 
 
 def make_scrollable(widget):
@@ -153,6 +197,15 @@ class Appearance(QObject):
         app.setPalette(palette)
         app.setStyleSheet(f"""
             QMainWindow, QDialog, QTabWidget::pane {{ background: {window}; }}
+            QFrame#overviewCard {{ background: {base}; border: 1px solid {border};
+                                   border-radius: 7px; }}
+            QMenuBar {{ background: {base}; border-bottom: 1px solid {border}; }}
+            QMenuBar::item {{ padding: 6px 12px; }}
+            QMenuBar::item:selected, QMenu::item:selected {{ background: {highlight}; }}
+            QMenu {{ background: {base}; color: {text}; border: 1px solid {border}; padding: 4px; }}
+            QMenu::item {{ padding: 6px 24px; }}
+            QMenu::item:disabled {{ color: {disabled}; }}
+            QMenu::separator {{ height: 1px; background: {border}; margin: 4px 8px; }}
             QGroupBox {{ border: 1px solid {border}; border-radius: 5px;
                         margin-top: 12px; padding: 14px 10px 8px; }}
             QGroupBox::title {{ subcontrol-origin: margin; left: 12px; padding: 0 5px; }}
@@ -161,6 +214,9 @@ class Appearance(QObject):
             QPushButton:hover {{ background: {highlight}; }}
             QPushButton:focus {{ border: 2px solid {text}; padding: 5px 11px; }}
             QPushButton:disabled {{ color: {disabled}; }}
+            QPushButton#overviewLink {{ background: transparent; border: none; padding: 0;
+                                       color: {text}; text-decoration: underline; }}
+            QPushButton#overviewLink:focus {{ background: {highlight}; }}
             QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{ background: {base}; color: {text};
                 border: 1px solid {border}; border-radius: 3px; padding: 4px; min-height: 22px; }}
             QComboBox QAbstractItemView {{ background: {base}; color: {text};

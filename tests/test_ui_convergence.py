@@ -22,6 +22,7 @@ from macronet.application import MainWindow
 
 app = QApplication([])
 window = MainWindow()
+assert window._load_demonstration()
 window.appearance.set_mode(sys.argv[1])
 tabs = window.centralWidget()
 assignment = tabs.widget(4)

@@ -6,6 +6,7 @@ import csv
 import json
 from datetime import date
 from io import StringIO
+from math import isclose
 from pathlib import Path
 
 import networkx as nx
@@ -295,7 +296,6 @@ def build_summary_tex(
     overloaded = sum(item.volume_capacity_ratio > 1.0 for item in assignment.link_results)
     lines = [
         r"\documentclass[11pt,letterpaper]{article}",
-        r"\usepackage[utf8]{inputenc}",
         r"\usepackage{amsmath}",
         r"\usepackage{booktabs}",
         r"\usepackage{longtable}",
@@ -482,7 +482,8 @@ def build_summary_tex(
         _append_fares_tex(lines, mode_choice, fare_scenarios or [])
     if microsimulation and microsimulation.get("last_run"):
         _append_sumo_tex(lines, microsimulation)
-    lines.extend([
+    overview_index = lines.index(r"\section{Generación y atracción}")
+    lines[overview_index:overview_index] = [
         r"\section{Conclusiones numéricas}",
         r"\begin{center}\begin{tabular}{lr}\toprule",
         r"Indicador & Resultado \\",
@@ -495,35 +496,40 @@ def build_summary_tex(
          if assignment.assigned_demand else "Tiempo medio interzonal (min) & --- ") + r"\\",
         f"Máxima relación $v/c$ & {critical_link.volume_capacity_ratio:.3f} " + r"\\",
         r"\bottomrule\end{tabular}\end{center}",
-    ])
+    ]
+    conclusions = []
     if mode_choice.total_trips:
         top_share = max(mode.share for mode in mode_choice.mode_summaries)
         leaders = ", ".join(
             _latex_escape(mode.mode_name)
-            for mode in mode_choice.mode_summaries if mode.share == top_share
+            for mode in mode_choice.mode_summaries
+            if isclose(mode.share, top_share, rel_tol=0, abs_tol=1e-12)
         )
-        lines.append(f"Modo predominante: {leaders} ({100 * top_share:.2f}\\%). ")
+        conclusions.append(f"Modo predominante: {leaders} ({100 * top_share:.2f}\\%). ")
     else:
-        lines.append("Modo predominante: no definido por demanda nula. ")
-    lines.append(
+        conclusions.append("Modo predominante: no definido por demanda nula. ")
+    conclusions.append(
         "Convergencia de distribución: "
         + ("alcanzada" if distribution.converged else "no alcanzada")
         + f"; error máximo {distribution.maximum_error:.6g} viajes."
     )
     if assignment.method == "ue":
-        lines.append(
+        conclusions.append(
             "Convergencia Wardrop: "
             + ("alcanzada" if assignment.converged else "no alcanzada")
             + f"; brecha relativa {assignment.relative_gap:.6g}."
         )
+    first_stage = lines.index(r"\section{Generación y atracción}")
+    lines[first_stage:first_stage] = conclusions
+    _insert_interpretations(lines, generation, distribution, mode_choice, assignment)
     lines.extend(
         [
             r"\section{Alcance}",
             (
-                "Los resultados pertenecen a un caso educativo. La asignación Todo-o-Nada "
-                "usa costos fijos. Wardrop requiere funciones separables no decrecientes, "
-                "red dirigida válida y demanda/capacidades del mismo periodo. "
-                "Los parámetros de ejemplo no son calibraciones locales."
+                "Los resultados corresponden a las entradas y al periodo declarados. "
+                "Las estimaciones requieren contraste con datos independientes para su uso "
+                "en decisiones reales; una convergencia numérica no constituye validación "
+                "del escenario."
             ),
         ]
     )
@@ -557,6 +563,98 @@ def build_summary_tex(
                                  mode.trip_matrix))
     lines.extend([r"\end{document}", ""])
     return "\n".join(lines)
+
+
+def _insert_interpretations(lines, generation, distribution, modal, assignment):
+    """Explica los resultados observados sin atribuir causas no modeladas."""
+
+    def add(section, text):
+        index = lines.index(r"\section{" + section + "}") + 1
+        lines[index:index] = [r"\textbf{Interpretación.} " + text + r"\par"]
+
+    difference = generation.total_attractions_raw - generation.total_productions
+    if isclose(difference, 0.0, rel_tol=0, abs_tol=1e-9):
+        balance = "Los totales iniciales coinciden; el balanceo no los cambia."
+    else:
+        comparison = "superaban" if difference > 0 else "eran menores que"
+        adjustment = "reduce" if generation.balance_factor < 1 else "aumenta"
+        balance = (
+            f"Las atracciones iniciales {comparison} las producciones por "
+            f"{abs(difference):.2f} viajes. El factor $F={generation.balance_factor:.5g}$ "
+            f"{adjustment} las atracciones en la misma proporción en cada zona."
+        )
+    if generation.total_productions > 0:
+        zone = max(generation.zones, key=lambda item: item.production)
+        share = 100 * zone.production / generation.total_productions
+        balance += (
+            f" {_latex_escape(zone.zone.name)} registra la mayor producción "
+            f"estimada: {zone.production:.2f} viajes ({share:.1f}\\%)."
+        )
+    add("Generación y atracción", balance)
+
+    total = sum(distribution.row_totals)
+    if total > 0:
+        intrazonal = sum(row[i] for i, row in enumerate(distribution.trip_matrix))
+        largest, origin, destination = max(
+            ((value, i, j) for i, row in enumerate(distribution.trip_matrix)
+             for j, value in enumerate(row) if i != j), default=(0, 0, 0)
+        )
+        od_text = f"El {100 * intrazonal / total:.1f}\\% de los viajes permanece en su zona. "
+        if largest > 0:
+            od_text += (
+                f"El par interzonal con mayor flujo es "
+                f"{_latex_escape(distribution.zone_names[origin])} $\\to$ "
+                f"{_latex_escape(distribution.zone_names[destination])} "
+                f"({largest:.2f} viajes). "
+            )
+    else:
+        od_text = "La matriz no contiene viajes. "
+    od_text += (
+        "El ajuste alcanzó la tolerancia de los marginales."
+        if distribution.converged else
+        "El ajuste no alcanzó la tolerancia de los marginales; revise el error antes de "
+        "usar esta matriz como insumo."
+    )
+    add("Distribución", od_text)
+
+    if modal.total_trips > 0:
+        ranked = sorted(modal.mode_summaries, key=lambda mode: mode.share, reverse=True)
+        first, second = ranked[:2]
+        gap = 100 * (first.share - second.share)
+        modal_text = (
+            f"{_latex_escape(first.mode_name)} supera a {_latex_escape(second.mode_name)} "
+            f"en {gap:.2f} puntos porcentuales."
+            if gap >= 0.005 else "Las dos mayores participaciones son iguales al redondear."
+        )
+        modal_text += (
+            " La gráfica muestra cómo el logit reparte la demanda OD del escenario "
+            "según los tiempos, costos y coeficientes utilizados."
+        )
+    else:
+        modal_text = "Sin demanda OD no es posible interpretar participaciones modales."
+    add("Elección modal", modal_text)
+
+    critical = max(assignment.link_results, key=lambda item: item.volume_capacity_ratio)
+    n_links = len(assignment.link_results)
+    overloaded = sum(item.volume_capacity_ratio > 1 for item in assignment.link_results)
+    if assignment.assigned_demand:
+        network = (
+            f"El arco más exigido es {_latex_escape(critical.link.link_id)} "
+            f"($v/c={critical.volume_capacity_ratio:.3f}$). "
+            f"En {overloaded} de {n_links} arcos el flujo supera la capacidad declarada."
+        )
+        network += (
+            " En Todo o Nada esto identifica presión potencial: los tiempos "
+            "permanecen en flujo libre."
+            if assignment.method == "aon" else
+            " Wardrop ajusta el tiempo según la relación volumen/capacidad."
+        )
+        if assignment.method == "ue" and not assignment.converged:
+            network += " La solución no alcanzó la brecha objetivo; interprétela como aproximada."
+        network += " La relación $v/c$ por sí sola no determina un nivel de servicio HCM."
+    else:
+        network = "No se cargaron viajes entre zonas, por lo que no hay tiempo medio de red."
+    add("Asignación", network)
 
 
 def _generation_plot_tex(result):
@@ -808,6 +906,19 @@ def _append_sumo_tex(lines, state):
                 "El contraste por arco usa muestras de todo el horizonte, incluido el despeje. "
                 "Estos indicadores no certifican equilibrio dinámico ni calibración local.",
             ]
+        )
+        arrivals = stats["arrived"]
+        fraction = 100 * arrivals / run["generated"]
+        lines.append(
+            r"\textbf{Interpretación.} "
+            f"Completaron el recorrido {arrivals} de {run['generated']} vehículos "
+            f"({fraction:.1f}\\%). "
+            + (
+                "Quedaron vehículos pendientes de inserción, en circulación o retirados; "
+                "los promedios no representan toda la demanda."
+                if arrivals < run["generated"] else
+                "El tiempo y la demora resumidos representan a todos los vehículos generados."
+            )
         )
         if run.get("edges"):
             lines.extend([
