@@ -72,23 +72,33 @@ def wait_idle(panel, timeout_ms=20000):
 def test_worker_keeps_event_loop_responsive_and_cancels_on_close(window):
     panel = window.centralWidget().microsimulation
     heartbeats = []
+    cancelled = []
     heartbeat = QTimer()
-    heartbeat.timeout.connect(lambda: heartbeats.append(1))
-    heartbeat.start(10)
+
+    def beat():
+        heartbeats.append(1)
+        if len(heartbeats) == 5:
+            window.close()
 
     def operation(cancel, _progress):
-        cancel.wait(5)
-        if cancel.is_set():
+        if cancel.wait(5):
+            cancelled.append(True)
             raise SumoCancelled("Cancelado")
         return {"tool_check": True, "versions": {"sumo": "test"}}
 
     window.show()
+    QApplication.processEvents()
+    heartbeat.timeout.connect(beat)
     panel._launch(operation)
-    QTimer.singleShot(200, window.close)
-    wait_idle(panel)
-    heartbeat.stop()
+    heartbeat.start(10)
+    try:
+        wait_idle(panel)
+    finally:
+        heartbeat.stop()
     assert len(heartbeats) >= 5
+    assert cancelled == [True]
     assert not panel.is_running
+    QApplication.processEvents()
 
 
 def test_pending_assignment_edits_are_never_sent_to_sumo(window):

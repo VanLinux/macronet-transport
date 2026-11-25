@@ -200,7 +200,7 @@ class MainWindow(QMainWindow):
 
     def _sumo_running_changed(self, running):
         if not running and self._close_after_sumo:
-            QTimer.singleShot(0, self.close)
+            QTimer.singleShot(0, self, self.close)
 
     def _mark_dirty(self, *_args) -> None:
         self._dirty = True
